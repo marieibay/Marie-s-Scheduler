@@ -105,52 +105,53 @@ interface DueDateDisplayProps {
 }
 
 const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ dueDate, originalDueDate, onUpdate }) => {
+    const [isEditing, setIsEditing] = useState(false);
     const dateInputRef = useRef<HTMLInputElement>(null);
 
-    const openPicker = () => {
-        dateInputRef.current?.showPicker();
-    };
-    
-    // Using onMouseDown is critical to intercept the event before drag-and-drop logic fires.
-    const handleInteraction = (e: React.MouseEvent | React.KeyboardEvent) => {
-        e.preventDefault();
-        e.stopPropagation(); // Stop the event from bubbling to the draggable parent
-        openPicker();
+    useEffect(() => {
+        if (isEditing) {
+            // Focus the input element when it becomes visible
+            dateInputRef.current?.focus();
+        }
+    }, [isEditing]);
+
+    const handleDisplayClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setIsEditing(true);
     };
 
+    const handleInputBlur = () => {
+        setIsEditing(false);
+    };
 
-    const handleKeyDown = (e: React.KeyboardEvent) => {
-        if (e.key === 'Enter' || e.key === ' ') {
-            handleInteraction(e);
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        onUpdate(e.target.value);
+    };
+
+    const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+        if (e.key === 'Enter' || e.key === 'Escape') {
+            setIsEditing(false);
         }
     };
 
     const alertIcon = useMemo(() => {
         if (!dueDate) return null;
-
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-
         const dueDateObj = new Date(dueDate + 'T00:00:00');
         if (isNaN(dueDateObj.getTime())) return null;
-
         dueDateObj.setHours(0, 0, 0, 0);
-
         const timeDiff = dueDateObj.getTime() - today.getTime();
         const dayDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
-
-        if (dayDiff < 0) { // Overdue
-            return <WarningIconRed />;
-        } else if (dayDiff <= 7) { // Due within the next 7 days
-            return <WarningIconYellow />;
-        }
+        if (dayDiff < 0) return <WarningIconRed />;
+        if (dayDiff <= 7) return <WarningIconYellow />;
         return null;
     }, [dueDate]);
     
     const formattedDate = useMemo(() => {
         if (!dueDate) return 'MM/DD/YY';
         try {
-            const date = new Date(dueDate + 'T00:00:00'); // To avoid timezone issues
+            const date = new Date(dueDate + 'T00:00:00');
             const month = String(date.getMonth() + 1).padStart(2, '0');
             const day = String(date.getDate()).padStart(2, '0');
             const year = String(date.getFullYear()).slice(-2);
@@ -162,25 +163,35 @@ const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ dueDate, originalDueDat
     
     const isUpdated = originalDueDate && dueDate !== originalDueDate;
 
+    if (isEditing) {
+        return (
+            <div className="relative flex items-center gap-2" style={{ height: '28px' }}>
+                 <span className="text-sm text-gray-600">Due:</span>
+                 <input
+                    ref={dateInputRef}
+                    type="date"
+                    value={dueDate}
+                    onChange={handleInputChange}
+                    onBlur={handleInputBlur}
+                    onKeyDown={handleInputKeyDown}
+                    className="p-1 border border-indigo-400 rounded-md shadow-sm focus:outline-none h-full"
+                />
+            </div>
+        );
+    }
+
     return (
         <div 
           className="relative flex items-center gap-2 cursor-pointer group" 
-          onMouseDown={handleInteraction}
-          onKeyDown={handleKeyDown}
+          onClick={handleDisplayClick}
+          onKeyDown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); setIsEditing(true); } }}
           role="button" 
           tabIndex={0} 
           aria-label={`Due date: ${formattedDate}. Click to change.`}
+          style={{ height: '28px' }}
         >
             <span className="text-sm text-gray-600">Due:</span>
             <span className={`font-bold text-lg w-[85px] group-hover:text-red-700 transition-colors ${!dueDate ? 'text-gray-400' : 'text-red-600'}`}>{formattedDate}</span>
-            <input
-                ref={dateInputRef}
-                type="date"
-                value={dueDate}
-                onChange={(e) => onUpdate(e.target.value)}
-                className="absolute opacity-0 w-0 h-0 pointer-events-none"
-                tabIndex={-1}
-            />
             <div className="w-5 h-5 flex items-center justify-center">{alertIcon}</div>
             {isUpdated && (
                 <span className="px-2 py-0.5 text-xs font-semibold text-blue-800 bg-blue-100 rounded-full">
@@ -203,46 +214,69 @@ interface SelectInputProps {
 const SelectInput: React.FC<SelectInputProps> = ({ value, onChange, options, placeholder, className }) => {
     const [inputValue, setInputValue] = useState(value);
     const [showOptions, setShowOptions] = useState(false);
-    
+    const wrapperRef = useRef<HTMLDivElement>(null);
+
+    // Sync input value with parent prop, but only if not focused to avoid cursor jumping
     useEffect(() => {
-        setInputValue(value);
+        if (document.activeElement !== wrapperRef.current?.querySelector('input')) {
+            setInputValue(value);
+        }
     }, [value]);
 
-    const handleBlur = (e: React.FocusEvent<HTMLDivElement>) => {
-        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-            setShowOptions(false);
-            if (inputValue !== value) {
-                onChange(inputValue);
+    // Handle clicks outside the component to close the dropdown
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+                setShowOptions(false);
+                if (inputValue !== value) { // Commit changes if text is different when closing
+                    onChange(inputValue);
+                }
             }
-        }
-    };
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [wrapperRef, inputValue, value, onChange]);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setInputValue(e.target.value);
-        if (!showOptions) {
-            setShowOptions(true);
-        }
+        setShowOptions(true);
     };
 
     const handleSelectOption = (option: string) => {
-        setInputValue(option);
-        onChange(option);
-        setShowOptions(false);
+        onChange(option); // Update parent state
+        setInputValue(option); // Update local state
+        setShowOptions(false); // Close dropdown
+    };
+    
+    const handleInputBlur = () => {
+        // We use a small timeout because a click on a dropdown option will cause a blur event first.
+        // The mousedown handler on the document is the primary way of closing, this is a fallback.
+        setTimeout(() => {
+            if (wrapperRef.current && !wrapperRef.current.contains(document.activeElement)) {
+                setShowOptions(false);
+                if (inputValue !== value) {
+                    onChange(inputValue);
+                }
+            }
+        }, 150);
     };
 
     const filteredOptions = useMemo(() =>
         options.filter(option =>
-            option.toLowerCase().includes(inputValue.toLowerCase())
+            option.toLowerCase().includes((inputValue || '').toLowerCase())
         ), [options, inputValue]
     );
 
     return (
-        <div className="relative w-full" onBlur={handleBlur}>
+        <div className="relative w-full" ref={wrapperRef}>
             <input
                 type="text"
                 value={inputValue}
                 onChange={handleInputChange}
                 onFocus={() => setShowOptions(true)}
+                onBlur={handleInputBlur}
                 placeholder={placeholder}
                 className={className}
                 autoComplete="off"
@@ -253,7 +287,7 @@ const SelectInput: React.FC<SelectInputProps> = ({ value, onChange, options, pla
                         <li
                             key={option}
                             className="px-3 py-2 cursor-pointer hover:bg-indigo-100"
-                            onMouseDown={(e) => { e.preventDefault(); handleSelectOption(option); }}
+                            onMouseDown={() => handleSelectOption(option)}
                         >
                             {option}
                         </li>
@@ -268,17 +302,11 @@ const SelectInput: React.FC<SelectInputProps> = ({ value, onChange, options, pla
 interface ProjectCardProps {
     project: Project;
     onUpdate: (id: number, field: keyof Project, value: string | number | boolean) => void;
-    isDraggable: boolean;
     onDelete?: (project: Project) => void;
-    onDragStart?: (e: React.DragEvent<HTMLDivElement>, project: Project) => void;
-    onDragOver?: (e: React.DragEvent<HTMLDivElement>) => void;
-    onDragLeave?: (e: React.DragEvent<HTMLDivElement>) => void;
-    onDrop?: (e: React.DragEvent<HTMLDivElement>, project: Project) => void;
-    isDraggingOver?: boolean;
 }
 
 
-const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, isDraggable, onDelete, onDragStart, onDragOver, onDragLeave, onDrop, isDraggingOver }) => {
+const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onDelete }) => {
     const whatsLeft = calculateWhatsLeft(project.estRt, project.totalEdited);
     
     const handleUpdate = (field: keyof Project, value: string | number | boolean) => {
@@ -287,12 +315,6 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, isDraggabl
 
     const handleNumberUpdate = (field: keyof Project, value: string) => {
         onUpdate(project.id, field, parseFloat(value) || 0);
-    };
-    
-    const stopDragFromStarting = (e: React.MouseEvent) => {
-      if (isDraggable) {
-        e.stopPropagation();
-      }
     };
 
     const renderStatusButtons = () => {
@@ -322,15 +344,10 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, isDraggabl
 
     return (
         <div
-            className={`card p-4 rounded-lg shadow-md flex flex-col gap-4 hover:shadow-lg transition-all duration-300 ${isDraggable ? 'cursor-grab' : ''} ${isDraggingOver ? 'drag-over-active' : ''} ${project.isOnHold ? 'bg-pink-100 border border-pink-300' : 'bg-white'}`}
-            draggable={isDraggable}
-            onDragStart={(e) => onDragStart?.(e, project)}
-            onDragOver={(e) => onDragOver?.(e)}
-            onDragLeave={(e) => onDragLeave?.(e)}
-            onDrop={(e) => onDrop?.(e, project)}
+            className={`p-4 rounded-lg shadow-md flex flex-col gap-4 hover:shadow-lg transition-all duration-300 ${project.isOnHold ? 'bg-pink-100 border border-pink-300' : 'bg-white'}`}
             data-id={project.id}
         >
-            <div className="flex justify-between items-start w-full gap-4" onMouseDown={stopDragFromStarting}>
+            <div className="flex justify-between items-start w-full gap-4">
                 <input 
                     type="text" 
                     value={project.title} 
@@ -363,7 +380,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, isDraggabl
                 </div>
             </div>
 
-            <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4" onMouseDown={stopDragFromStarting}>
+            <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
                 <div className="space-y-3">
                     <DueDateDisplay
                         dueDate={project.dueDate}
@@ -406,7 +423,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, isDraggabl
                 </div>
             </div>
 
-            <div className="w-full" onMouseDown={stopDragFromStarting}>
+            <div className="w-full">
                 <textarea
                     value={project.notes}
                     onChange={(e) => handleUpdate('notes', e.target.value)}
@@ -423,53 +440,12 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, isDraggabl
 interface ManagerViewProps {
     projects: Project[];
     onUpdate: (id: number, field: keyof Project, value: string | number | boolean) => void;
-    onReorder: (draggedId: number, targetId: number) => void;
     onDelete: (project: Project) => void;
 }
 
-const ManagerView: React.FC<ManagerViewProps> = ({ projects, onUpdate, onReorder, onDelete }) => {
-    const [draggedItem, setDraggedItem] = useState<Project | null>(null);
-    const [draggedOverItem, setDraggedOverItem] = useState<Project | null>(null);
-
-    const handleDragStart = (e: React.DragEvent<HTMLDivElement>, project: Project) => {
-        setDraggedItem(project);
-        e.dataTransfer.effectAllowed = 'move';
-        setTimeout(() => {
-            const el = e.currentTarget as HTMLElement;
-            if (el) el.classList.add('dragging');
-        }, 0);
-    };
-    
-    const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
-        e.preventDefault();
-        const targetId = Number(e.currentTarget.dataset.id);
-        if (draggedItem && targetId !== draggedItem.id) {
-            const project = projects.find(p => p.id === targetId);
-            if (project) setDraggedOverItem(project);
-        }
-    };
-    
-    const handleDragLeave = () => {
-        setDraggedOverItem(null);
-    };
-
-    const handleDrop = (e: React.DragEvent<HTMLDivElement>, targetProject: Project) => {
-        if (draggedItem) {
-            onReorder(draggedItem.id, targetProject.id);
-        }
-        setDraggedItem(null);
-        setDraggedOverItem(null);
-    };
-    
-    const handleDragEnd = (e: React.DragEvent<HTMLDivElement>) => {
-        const el = e.currentTarget as HTMLElement;
-        if(el) el.classList.remove('dragging');
-        setDraggedItem(null);
-        setDraggedOverItem(null);
-    };
-
+const ManagerView: React.FC<ManagerViewProps> = ({ projects, onUpdate, onDelete }) => {
     return (
-        <div onDragEnd={handleDragEnd}>
+        <div>
             <div className="space-y-4">
                 {projects.length > 0 ? projects.map(project => (
                     <ProjectCard
@@ -477,12 +453,6 @@ const ManagerView: React.FC<ManagerViewProps> = ({ projects, onUpdate, onReorder
                         project={project}
                         onUpdate={onUpdate}
                         onDelete={onDelete}
-                        isDraggable={true}
-                        onDragStart={handleDragStart}
-                        onDragOver={handleDragOver}
-                        onDragLeave={handleDragLeave}
-                        onDrop={handleDrop}
-                        isDraggingOver={draggedOverItem?.id === project.id}
                     />
                 )) : (
                     <div className="text-center py-12 bg-white rounded-lg shadow-md">
@@ -535,7 +505,6 @@ const ClientView: React.FC<ClientViewProps> = ({ projects, onUpdate }) => {
                                 key={project.id}
                                 project={project}
                                 onUpdate={onUpdate}
-                                isDraggable={false}
                             />
                         ))}
                     </div>
@@ -689,21 +658,6 @@ const App: React.FC = () => {
         setProjects(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p));
     }, []);
     
-    const handleReorderProjects = useCallback((draggedId: number, targetId: number) => {
-        setProjects(currentProjects => {
-            const draggedIndex = currentProjects.findIndex(p => p.id === draggedId);
-            const targetIndex = currentProjects.findIndex(p => p.id === targetId);
-
-            if (draggedIndex === -1 || targetIndex === -1 || draggedIndex === targetIndex) return currentProjects;
-            
-            const newProjects = [...currentProjects];
-            const [draggedItem] = newProjects.splice(draggedIndex, 1);
-            newProjects.splice(targetIndex, 0, draggedItem);
-            
-            return newProjects;
-        });
-    }, []);
-    
     const handleSortByDate = useCallback(() => {
         setProjects(prevProjects => {
             const sortFn = (a: Project, b: Project) => {
@@ -757,7 +711,7 @@ const App: React.FC = () => {
         
         switch (viewMode) {
             case 'manager':
-                return <ManagerView projects={projectsForPage} onUpdate={handleUpdateProjectField} onReorder={handleReorderProjects} onDelete={handleOpenDeleteModal} />;
+                return <ManagerView projects={projectsForPage} onUpdate={handleUpdateProjectField} onDelete={handleOpenDeleteModal} />;
             case 'client':
                 return <ClientView projects={projectsForPage} onUpdate={handleUpdateProjectField} />;
             default:
