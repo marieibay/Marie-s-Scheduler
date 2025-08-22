@@ -14,7 +14,7 @@ export interface Project {
   totalEdited: number;
   remainingRaw: number;
   isOnHold: boolean;
-  status: 'ongoing' | 'done';
+  status: 'ongoing' | 'done' | 'archived';
 }
 
 export type ViewMode = 'manager' | 'editor' | 'client';

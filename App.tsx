@@ -333,6 +333,36 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, isDraggabl
         onUpdate(project.id, field, parseFloat(value) || 0);
     };
 
+    const renderStatusButtons = () => {
+        switch (project.status) {
+            case 'ongoing':
+                return (
+                    <button onClick={() => handleUpdate('status', 'done')} className="px-3 py-1 text-xs font-semibold rounded-full shadow-sm transition-colors whitespace-nowrap bg-green-500 text-white hover:bg-green-600">
+                        Mark as Done
+                    </button>
+                );
+            case 'done':
+                return (
+                    <div className="flex items-center gap-2">
+                        <button onClick={() => handleUpdate('status', 'ongoing')} className="px-3 py-1 text-xs font-semibold rounded-full shadow-sm transition-colors whitespace-nowrap bg-blue-500 text-white hover:bg-blue-600">
+                            Move to Ongoing
+                        </button>
+                        <button onClick={() => handleUpdate('status', 'archived')} className="px-3 py-1 text-xs font-semibold rounded-full shadow-sm transition-colors whitespace-nowrap bg-gray-500 text-white hover:bg-gray-600">
+                            Archive
+                        </button>
+                    </div>
+                );
+            case 'archived':
+                 return (
+                    <button onClick={() => handleUpdate('status', 'done')} className="px-3 py-1 text-xs font-semibold rounded-full shadow-sm transition-colors whitespace-nowrap bg-purple-500 text-white hover:bg-purple-600">
+                        Unarchive
+                    </button>
+                );
+            default:
+                return null;
+        }
+    }
+
     return (
         <div
             className={`card p-4 rounded-lg shadow-md flex flex-col xl:flex-row items-start gap-4 hover:shadow-lg transition-all duration-300 ${isDraggable ? 'cursor-grab' : ''} ${isDraggingOver ? 'drag-over-active' : ''} ${project.isOnHold ? 'bg-pink-100 border border-pink-300' : 'bg-white'}`}
@@ -358,16 +388,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, isDraggabl
                         >
                             {project.isOnHold ? 'On Hold' : 'Set Hold'}
                         </button>
-                         <button
-                            onClick={() => handleUpdate('status', project.status === 'ongoing' ? 'done' : 'ongoing')}
-                            className={`px-3 py-1 text-xs font-semibold rounded-full shadow-sm transition-colors whitespace-nowrap ${
-                                project.status === 'ongoing'
-                                ? 'bg-green-500 text-white hover:bg-green-600'
-                                : 'bg-gray-500 text-white hover:bg-gray-600'
-                            }`}
-                        >
-                            {project.status === 'ongoing' ? 'Mark as Done' : 'Move to Ongoing'}
-                        </button>
+                         {renderStatusButtons()}
                     </div>
                 </div>
                 <div className="mt-1">
@@ -824,7 +845,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, pr
 const App: React.FC = () => {
     const [projects, setProjects] = useState<Project[]>(initialProjects);
     const [viewMode, setViewMode] = useState<ViewMode>('manager');
-    const [currentPage, setCurrentPage] = useState<'ongoing' | 'done'>('ongoing');
+    const [currentPage, setCurrentPage] = useState<'ongoing' | 'done' | 'archived'>('ongoing');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingProject, setEditingProject] = useState<Project | null>(null);
 
@@ -854,6 +875,7 @@ const App: React.FC = () => {
     
     const ongoingProjects = useMemo(() => sortedProjects.filter(p => p.status === 'ongoing'), [sortedProjects]);
     const doneProjects = useMemo(() => sortedProjects.filter(p => p.status === 'done'), [sortedProjects]);
+    const archivedProjects = useMemo(() => sortedProjects.filter(p => p.status === 'archived'), [sortedProjects]);
 
     const handleSwitchView = (mode: ViewMode) => setViewMode(mode);
 
@@ -904,8 +926,26 @@ const App: React.FC = () => {
             return <EditorView projects={ongoingProjects} onUpdate={handleUpdateProjectField} />;
         }
         
-        const projectsForPage = currentPage === 'ongoing' ? ongoingProjects : doneProjects;
-        const projectsForManagerView = currentPage === 'ongoing' ? projects.filter(p => p.status === 'ongoing') : projects.filter(p => p.status === 'done');
+        let projectsForPage: Project[];
+        let projectsForManagerView: Project[];
+
+        switch(currentPage) {
+            case 'ongoing':
+                projectsForPage = ongoingProjects;
+                projectsForManagerView = projects.filter(p => p.status === 'ongoing');
+                break;
+            case 'done':
+                projectsForPage = doneProjects;
+                projectsForManagerView = projects.filter(p => p.status === 'done');
+                break;
+            case 'archived':
+                projectsForPage = archivedProjects;
+                projectsForManagerView = projects.filter(p => p.status === 'archived');
+                break;
+            default:
+                projectsForPage = [];
+                projectsForManagerView = [];
+        }
         
         switch (viewMode) {
             case 'manager':
@@ -939,6 +979,7 @@ const App: React.FC = () => {
                      <div className="flex items-center space-x-2 bg-gray-100 p-1 rounded-lg">
                         <button onClick={() => setCurrentPage('ongoing')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${currentPage === 'ongoing' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>Ongoing Edits</button>
                         <button onClick={() => setCurrentPage('done')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${currentPage === 'done' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>Edit Done</button>
+                        <button onClick={() => setCurrentPage('archived')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${currentPage === 'archived' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>Archived Projects</button>
                     </div>
                     <div className="flex items-center space-x-2 bg-gray-100 p-1 rounded-lg">
                         <span className="text-sm font-medium hidden sm:block px-2">View Mode:</span>
