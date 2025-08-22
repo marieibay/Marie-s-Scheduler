@@ -2,6 +2,7 @@
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { Project, ViewMode } from './types';
 import { initialProjects } from './data';
+import { editors, masters, qcPersonnel } from './employees';
 
 // --- HELPER FUNCTIONS ---
 const getClientName = (project: Project): string => {
@@ -139,52 +140,47 @@ interface RichTextInputProps {
 const RichTextInput: React.FC<RichTextInputProps> = ({ value, onChange, placeholder }) => {
     const editorRef = useRef<HTMLDivElement>(null);
     const [isFocused, setIsFocused] = useState(false);
-    const valueRef = useRef(value);
-
+    
+    const isMounted = useRef(false);
     useEffect(() => {
-        valueRef.current = value;
-    }, [value]);
+        isMounted.current = true;
+        return () => { isMounted.current = false; };
+    }, []);
 
     const handleInput = useCallback((e: React.FormEvent<HTMLDivElement>) => {
-        const newHTML = e.currentTarget.innerHTML;
-        if (newHTML !== valueRef.current) {
-            onChange(newHTML);
-        }
+        onChange(e.currentTarget.innerHTML);
     }, [onChange]);
     
     const handleFocus = useCallback(() => {
         setIsFocused(true);
     }, []);
     
-    const handleBlur = useCallback((e: React.FocusEvent<HTMLDivElement>) => {
-        // If focus moves outside the component, hide the toolbar
-        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-            setIsFocused(false);
-        }
-        
-        // Also handle the content update on blur to catch final changes
-        const newHTML = e.currentTarget.innerHTML;
-        if (newHTML !== valueRef.current) {
-            onChange(newHTML);
-        }
-    }, [onChange]);
-
+    const handleBlur = useCallback(() => {
+        // Delay hiding the toolbar to allow button clicks
+        setTimeout(() => {
+            if(isMounted.current) setIsFocused(false);
+        }, 150);
+    }, []);
 
     const execCmd = (command: string, val?: string) => {
         if (editorRef.current) {
             editorRef.current.focus();
             document.execCommand(command, false, val);
-            onChange(editorRef.current.innerHTML); // Update state immediately after command
+            onChange(editorRef.current.innerHTML);
         }
     };
     
     const isEffectivelyEmpty = !value || value.replace(/<[^>]*>?/gm, '').trim().length === 0;
+    
+     useEffect(() => {
+        if (editorRef.current && editorRef.current.innerHTML !== value) {
+            editorRef.current.innerHTML = value;
+        }
+    }, [value]);
 
     return (
         <div 
             className="relative bg-white border border-gray-300 rounded-md shadow-sm focus-within:ring-1 focus-within:ring-indigo-500 focus-within:border-indigo-500"
-            onFocus={handleFocus}
-            onBlur={handleBlur}
         >
             {isFocused && (
                 <div className="flex flex-wrap items-center p-1 bg-gray-50 border-b border-gray-200 rounded-t-md space-x-2">
@@ -214,11 +210,101 @@ const RichTextInput: React.FC<RichTextInputProps> = ({ value, onChange, placehol
                     ref={editorRef}
                     contentEditable
                     onInput={handleInput}
+                    onFocus={handleFocus}
+                    onBlur={handleBlur}
                     className="w-full h-full focus:outline-none"
                     spellCheck="false"
-                    dangerouslySetInnerHTML={{ __html: value }}
                 />
             </div>
+        </div>
+    );
+};
+
+// Autocomplete Select Input
+interface SelectInputProps {
+    value: string;
+    onChange: (newValue: string) => void;
+    options: string[];
+    placeholder?: string;
+    className?: string;
+}
+
+const SelectInput: React.FC<SelectInputProps> = ({ value, onChange, options, placeholder, className }) => {
+    const [inputValue, setInputValue] = useState(value);
+    const [showOptions, setShowOptions] = useState(false);
+    const wrapperRef = useRef<HTMLDivElement>(null);
+
+    useEffect(() => {
+        setInputValue(value);
+    }, [value]);
+
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+                setShowOptions(false);
+                if (inputValue !== value) {
+                   onChange(inputValue); // Save on blur if different
+                }
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => {
+            document.removeEventListener('mousedown', handleClickOutside);
+        };
+    }, [wrapperRef, inputValue, value, onChange]);
+
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        setInputValue(e.target.value);
+        setShowOptions(true);
+    };
+
+    const handleSelectOption = (option: string) => {
+        setInputValue(option);
+        onChange(option);
+        setShowOptions(false);
+    };
+    
+    const handleBlur = () => {
+        // Timeout allows click event on options to register
+        setTimeout(() => {
+            if (inputValue !== value) {
+                onChange(inputValue);
+            }
+            setShowOptions(false);
+        }, 150);
+    };
+
+    const filteredOptions = useMemo(() =>
+        options.filter(option =>
+            option.toLowerCase().includes(inputValue.toLowerCase())
+        ), [options, inputValue]
+    );
+
+    return (
+        <div className="relative w-full" ref={wrapperRef}>
+            <input
+                type="text"
+                value={inputValue}
+                onChange={handleInputChange}
+                onFocus={() => setShowOptions(true)}
+                onBlur={handleBlur}
+                placeholder={placeholder}
+                className={className}
+                autoComplete="off"
+            />
+            {showOptions && filteredOptions.length > 0 && (
+                <ul className="absolute z-10 w-full bg-white border border-gray-300 rounded-md shadow-lg mt-1 max-h-60 overflow-auto">
+                    {filteredOptions.map(option => (
+                        <li
+                            key={option}
+                            className="px-3 py-2 cursor-pointer hover:bg-indigo-100"
+                            onMouseDown={() => handleSelectOption(option)} // Use onMouseDown to prevent blur from firing first
+                        >
+                            {option}
+                        </li>
+                    ))}
+                </ul>
+            )}
         </div>
     );
 };
@@ -291,15 +377,15 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, isDraggabl
             <div className="w-full xl:w-auto xl:max-w-md">
                  <div className="grid grid-cols-[auto_1fr_1.5fr] gap-x-2 gap-y-2 items-center text-sm text-gray-600">
                     <strong className="text-right">Editor:</strong>
-                    <input type="text" value={project.editor} onChange={(e) => handleUpdate('editor', e.target.value)} className={INLINE_INPUT_CLASS} placeholder="Name..."/>
+                    <SelectInput value={project.editor} onChange={(val) => handleUpdate('editor', val)} options={editors} placeholder="Name..." className={INLINE_INPUT_CLASS} />
                     <input type="text" value={project.editorNote} onChange={(e) => handleUpdate('editorNote', e.target.value)} className={INLINE_INPUT_CLASS} placeholder="Note..."/>
 
                     <strong className="text-right">Master:</strong>
-                    <input type="text" value={project.master} onChange={(e) => handleUpdate('master', e.target.value)} className={INLINE_INPUT_CLASS} placeholder="Name..."/>
+                    <SelectInput value={project.master} onChange={(val) => handleUpdate('master', val)} options={masters} placeholder="Name..." className={INLINE_INPUT_CLASS} />
                     <input type="text" value={project.masterNote} onChange={(e) => handleUpdate('masterNote', e.target.value)} className={INLINE_INPUT_CLASS} placeholder="Note..."/>
                     
                     <strong className="text-right">PZ QC:</strong>
-                    <input type="text" value={project.pzQc} onChange={(e) => handleUpdate('pzQc', e.target.value)} className={INLINE_INPUT_CLASS} placeholder="Name..."/>
+                     <SelectInput value={project.pzQc} onChange={(val) => handleUpdate('pzQc', val)} options={qcPersonnel} placeholder="Name..." className={INLINE_INPUT_CLASS} />
                     <input type="text" value={project.pzQcNote} onChange={(e) => handleUpdate('pzQcNote', e.target.value)} className={INLINE_INPUT_CLASS} placeholder="Note..."/>
                  </div>
             </div>
@@ -341,7 +427,7 @@ const ManagerView: React.FC<ManagerViewProps> = ({ projects, onUpdate, onReorder
 
     const handleDragStart = (e: React.DragEvent<HTMLDivElement>, project: Project) => {
         const targetNodeName = (e.target as HTMLElement).nodeName.toLowerCase();
-        if (['input', 'textarea', 'button'].includes(targetNodeName) || (e.target as HTMLElement).closest('button') || (e.target as HTMLElement).closest('[contenteditable]')) {
+        if (['input', 'textarea', 'button', 'li'].includes(targetNodeName) || (e.target as HTMLElement).closest('button') || (e.target as HTMLElement).closest('[contenteditable]')) {
             e.preventDefault();
             return;
         }
@@ -469,7 +555,9 @@ const EditorRow: React.FC<EditorRowProps> = ({ project, onUpdate }) => {
                     <span className="hidden sm:inline">|</span>
                     <span className="flex items-center">
                         Editor:
-                        <input type="text" value={project.editor} onChange={(e) => onUpdate(project.id, 'editor', e.target.value)} className={`${INLINE_INPUT_CLASS} w-24 ml-1`} placeholder="Name"/>
+                        <div className="w-24 ml-1">
+                          <SelectInput value={project.editor} onChange={(val) => onUpdate(project.id, 'editor', val)} options={editors} placeholder="Name" className={`${INLINE_INPUT_CLASS}`} />
+                        </div>
                         <input type="text" value={project.editorNote} onChange={(e) => onUpdate(project.id, 'editorNote', e.target.value)} className={`${INLINE_INPUT_CLASS} flex-grow ml-1`} placeholder="Note..."/>
                     </span>
                 </div>
@@ -554,6 +642,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, pr
     });
     
     const modalRef = useRef<HTMLDivElement>(null);
+    const MODAL_INPUT_CLASS = "mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500";
 
     React.useEffect(() => {
         if (project) { 
@@ -576,6 +665,10 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, pr
     const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
         const { id, value } = e.target;
         setFormData(prev => ({ ...prev, [id]: value }));
+    };
+
+    const handleSelectChange = (field: keyof Omit<Project, 'id'>, value: string) => {
+        setFormData(prev => ({ ...prev, [field]: value }));
     };
 
     const handleNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -604,11 +697,11 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, pr
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                         <div>
                             <label htmlFor="title" className="block text-sm font-medium text-gray-700">Title</label>
-                            <input type="text" id="title" value={formData.title} onChange={handleChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" required />
+                            <input type="text" id="title" value={formData.title} onChange={handleChange} className={MODAL_INPUT_CLASS} required />
                         </div>
                         <div>
                             <label htmlFor="dueDate" className="block text-sm font-medium text-gray-700">Due Date</label>
-                            <input type="date" id="dueDate" value={formData.dueDate} onChange={handleChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" required />
+                            <input type="date" id="dueDate" value={formData.dueDate} onChange={handleChange} className={MODAL_INPUT_CLASS} required />
                         </div>
                     </div>
                      <div className="flex items-center mt-2">
@@ -636,31 +729,31 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, pr
                         <fieldset className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label htmlFor="editor" className="block text-sm font-medium text-gray-700">Editor</label>
-                                <input type="text" id="editor" value={formData.editor} onChange={handleChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm" />
+                                <SelectInput value={formData.editor} onChange={(val) => handleSelectChange('editor', val)} options={editors} className={MODAL_INPUT_CLASS} />
                             </div>
                              <div>
                                 <label htmlFor="editorNote" className="block text-sm font-medium text-gray-700">Editor Note</label>
-                                <input type="text" id="editorNote" value={formData.editorNote} onChange={handleChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm" />
+                                <input type="text" id="editorNote" value={formData.editorNote} onChange={handleChange} className={MODAL_INPUT_CLASS} />
                             </div>
                         </fieldset>
                          <fieldset className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label htmlFor="master" className="block text-sm font-medium text-gray-700">Master</label>
-                                <input type="text" id="master" value={formData.master} onChange={handleChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm" />
+                                <SelectInput value={formData.master} onChange={(val) => handleSelectChange('master', val)} options={masters} className={MODAL_INPUT_CLASS} />
                             </div>
                              <div>
                                 <label htmlFor="masterNote" className="block text-sm font-medium text-gray-700">Master Note</label>
-                                <input type="text" id="masterNote" value={formData.masterNote} onChange={handleChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm" />
+                                <input type="text" id="masterNote" value={formData.masterNote} onChange={handleChange} className={MODAL_INPUT_CLASS} />
                             </div>
                         </fieldset>
                         <fieldset className="grid grid-cols-1 md:grid-cols-2 gap-4">
                             <div>
                                 <label htmlFor="pzQc" className="block text-sm font-medium text-gray-700">PZ QC</label>
-                                <input type="text" id="pzQc" value={formData.pzQc} onChange={handleChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm" />
+                                <SelectInput value={formData.pzQc} onChange={(val) => handleSelectChange('pzQc', val)} options={qcPersonnel} className={MODAL_INPUT_CLASS} />
                             </div>
                              <div>
                                 <label htmlFor="pzQcNote" className="block text-sm font-medium text-gray-700">PZ QC Note</label>
-                                <input type="text" id="pzQcNote" value={formData.pzQcNote} onChange={handleChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm" />
+                                <input type="text" id="pzQcNote" value={formData.pzQcNote} onChange={handleChange} className={MODAL_INPUT_CLASS} />
                             </div>
                         </fieldset>
                     </div>
@@ -668,15 +761,15 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, pr
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
                             <label htmlFor="estRt" className="block text-sm font-medium text-gray-700">EST RT (hrs)</label>
-                            <input type="number" step="0.01" id="estRt" value={formData.estRt} onChange={handleNumberChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" />
+                            <input type="number" step="0.01" id="estRt" value={formData.estRt} onChange={handleNumberChange} className={MODAL_INPUT_CLASS} />
                         </div>
                         <div>
                             <label htmlFor="totalEdited" className="block text-sm font-medium text-gray-700">Total Edited (hrs)</label>
-                            <input type="number" step="0.01" id="totalEdited" value={formData.totalEdited} onChange={handleNumberChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" />
+                            <input type="number" step="0.01" id="totalEdited" value={formData.totalEdited} onChange={handleNumberChange} className={MODAL_INPUT_CLASS} />
                         </div>
                         <div>
                             <label htmlFor="remainingRaw" className="block text-sm font-medium text-gray-700">Remaining RAW (hrs)</label>
-                            <input type="number" step="0.01" id="remainingRaw" value={formData.remainingRaw} onChange={handleNumberChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" />
+                            <input type="number" step="0.01" id="remainingRaw" value={formData.remainingRaw} onChange={handleNumberChange} className={MODAL_INPUT_CLASS} />
                         </div>
                     </div>
                     <div className="pt-4 flex justify-end space-x-3">
