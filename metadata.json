@@ -1,0 +1,5 @@
+{
+  "name": "Audiobook Production Dashboard",
+  "description": "A dashboard to manage and track the post-production workflow of audiobook projects, inspired by a user-provided layout. It features different views for managers and editors, drag-and-drop project reordering, and progress tracking.",
+  "requestFramePermissions": []
+}
