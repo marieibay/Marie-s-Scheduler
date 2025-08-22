@@ -139,22 +139,42 @@ interface RichTextInputProps {
 const RichTextInput: React.FC<RichTextInputProps> = ({ value, onChange, placeholder }) => {
     const editorRef = useRef<HTMLDivElement>(null);
     const [isFocused, setIsFocused] = useState(false);
+    const valueRef = useRef(value);
 
     useEffect(() => {
-        if (editorRef.current && value !== editorRef.current.innerHTML) {
-            editorRef.current.innerHTML = value;
-        }
+        valueRef.current = value;
     }, [value]);
 
-    const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
-        onChange(e.currentTarget.innerHTML);
-    };
+    const handleInput = useCallback((e: React.FormEvent<HTMLDivElement>) => {
+        const newHTML = e.currentTarget.innerHTML;
+        if (newHTML !== valueRef.current) {
+            onChange(newHTML);
+        }
+    }, [onChange]);
+    
+    const handleFocus = useCallback(() => {
+        setIsFocused(true);
+    }, []);
+    
+    const handleBlur = useCallback((e: React.FocusEvent<HTMLDivElement>) => {
+        // If focus moves outside the component, hide the toolbar
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+            setIsFocused(false);
+        }
+        
+        // Also handle the content update on blur to catch final changes
+        const newHTML = e.currentTarget.innerHTML;
+        if (newHTML !== valueRef.current) {
+            onChange(newHTML);
+        }
+    }, [onChange]);
+
 
     const execCmd = (command: string, val?: string) => {
         if (editorRef.current) {
             editorRef.current.focus();
             document.execCommand(command, false, val);
-            onChange(editorRef.current.innerHTML);
+            onChange(editorRef.current.innerHTML); // Update state immediately after command
         }
     };
     
@@ -163,44 +183,40 @@ const RichTextInput: React.FC<RichTextInputProps> = ({ value, onChange, placehol
     return (
         <div 
             className="relative bg-white border border-gray-300 rounded-md shadow-sm focus-within:ring-1 focus-within:ring-indigo-500 focus-within:border-indigo-500"
-            onFocus={() => setIsFocused(true)}
-            onBlur={(e) => {
-                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
-                    setIsFocused(false);
-                }
-            }}
+            onFocus={handleFocus}
+            onBlur={handleBlur}
         >
             {isFocused && (
                 <div className="flex flex-wrap items-center p-1 bg-gray-50 border-b border-gray-200 rounded-t-md space-x-2">
-                    <button type="button" onClick={() => execCmd('bold')} className="px-2 py-1 rounded hover:bg-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-400 font-bold" title="Bold">B</button>
+                    <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => execCmd('bold')} className="px-2 py-1 rounded hover:bg-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-400 font-bold" title="Bold">B</button>
                     
                     <div className="flex items-center space-x-1 border-l pl-2 ml-1">
                         <span className="text-sm text-gray-600 mr-1">Size:</span>
-                        <button type="button" onClick={() => execCmd('fontSize', '2')} className="px-2 py-1 rounded hover:bg-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-400 text-xs" title="Small">S</button>
-                        <button type="button" onClick={() => execCmd('fontSize', '4')} className="px-2 py-1 rounded hover:bg-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-400 text-base" title="Medium">M</button>
-                        <button type="button" onClick={() => execCmd('fontSize', '6')} className="px-2 py-1 rounded hover:bg-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-400 text-lg" title="Large">L</button>
+                        <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => execCmd('fontSize', '2')} className="px-2 py-1 rounded hover:bg-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-400 text-xs" title="Small">S</button>
+                        <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => execCmd('fontSize', '4')} className="px-2 py-1 rounded hover:bg-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-400 text-base" title="Medium">M</button>
+                        <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => execCmd('fontSize', '6')} className="px-2 py-1 rounded hover:bg-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-400 text-lg" title="Large">L</button>
                     </div>
                     
                     <div className="flex items-center space-x-1 border-l pl-2 ml-1">
                         <span className="text-sm text-gray-600 mr-1">Color:</span>
-                        <button type="button" onClick={() => execCmd('foreColor', '#1f2937')} className="p-1 rounded-full hover:bg-gray-200" title="Black"><span className="block w-4 h-4 rounded-full border bg-gray-800"></span></button>
-                        <button type="button" onClick={() => execCmd('foreColor', '#ef4444')} className="p-1 rounded-full hover:bg-gray-200" title="Red"><span className="block w-4 h-4 rounded-full border bg-red-500"></span></button>
-                        <button type="button" onClick={() => execCmd('foreColor', '#3b82f6')} className="p-1 rounded-full hover:bg-gray-200" title="Blue"><span className="block w-4 h-4 rounded-full border bg-blue-500"></span></button>
-                        <button type="button" onClick={() => execCmd('foreColor', '#22c55e')} className="p-1 rounded-full hover:bg-gray-200" title="Green"><span className="block w-4 h-4 rounded-full border bg-green-500"></span></button>
+                        <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => execCmd('foreColor', '#1f2937')} className="p-1 rounded-full hover:bg-gray-200" title="Black"><span className="block w-4 h-4 rounded-full border bg-gray-800"></span></button>
+                        <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => execCmd('foreColor', '#ef4444')} className="p-1 rounded-full hover:bg-gray-200" title="Red"><span className="block w-4 h-4 rounded-full border bg-red-500"></span></button>
+                        <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => execCmd('foreColor', '#3b82f6')} className="p-1 rounded-full hover:bg-gray-200" title="Blue"><span className="block w-4 h-4 rounded-full border bg-blue-500"></span></button>
+                        <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => execCmd('foreColor', '#22c55e')} className="p-1 rounded-full hover:bg-gray-200" title="Green"><span className="block w-4 h-4 rounded-full border bg-green-500"></span></button>
                     </div>
                 </div>
             )}
             <div className="relative p-2 min-h-[60px]">
-                {isEffectivelyEmpty && (
+                 {isEffectivelyEmpty && !isFocused && (
                      <div className="absolute top-2 left-2 text-gray-400 pointer-events-none select-none">{placeholder}</div>
                 )}
                 <div
                     ref={editorRef}
                     contentEditable
                     onInput={handleInput}
-                    dangerouslySetInnerHTML={{ __html: value }}
                     className="w-full h-full focus:outline-none"
                     spellCheck="false"
+                    dangerouslySetInnerHTML={{ __html: value }}
                 />
             </div>
         </div>
@@ -210,7 +226,7 @@ const RichTextInput: React.FC<RichTextInputProps> = ({ value, onChange, placehol
 // Project Card for Manager and Client Views
 interface ProjectCardProps {
     project: Project;
-    onUpdate: (id: number, field: keyof Project, value: string | number) => void;
+    onUpdate: (id: number, field: keyof Project, value: string | number | boolean) => void;
     isDraggable: boolean;
     onDragStart?: (e: React.DragEvent<HTMLDivElement>, project: Project) => void;
     onDragOver?: (e: React.DragEvent<HTMLDivElement>) => void;
@@ -223,7 +239,7 @@ interface ProjectCardProps {
 const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, isDraggable, onDragStart, onDragOver, onDragLeave, onDrop, isDraggingOver }) => {
     const whatsLeft = calculateWhatsLeft(project.estRt, project.totalEdited);
     
-    const handleUpdate = (field: keyof Project, value: string | number) => {
+    const handleUpdate = (field: keyof Project, value: string | number | boolean) => {
         onUpdate(project.id, field, value);
     };
 
@@ -233,7 +249,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, isDraggabl
 
     return (
         <div
-            className={`card bg-white p-4 rounded-lg shadow-md flex flex-col xl:flex-row items-start gap-4 hover:shadow-lg transition-all duration-300 ${isDraggable ? 'cursor-grab' : ''} ${isDraggingOver ? 'drag-over-active' : ''}`}
+            className={`card p-4 rounded-lg shadow-md flex flex-col xl:flex-row items-start gap-4 hover:shadow-lg transition-all duration-300 ${isDraggable ? 'cursor-grab' : ''} ${isDraggingOver ? 'drag-over-active' : ''} ${project.isOnHold ? 'bg-pink-100 border border-pink-300' : 'bg-white'}`}
             draggable={isDraggable}
             onDragStart={(e) => isDraggable && onDragStart?.(e, project)}
             onDragOver={(e) => isDraggable && onDragOver?.(e)}
@@ -243,7 +259,19 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, isDraggabl
         >
             {/* Title, Due Date & Notes */}
             <div className="flex-1 w-full min-w-0">
-                <input type="text" value={project.title} onChange={(e) => handleUpdate('title', e.target.value)} className={`font-bold text-md lg:text-lg text-gray-800 truncate ${INLINE_INPUT_CLASS}`} placeholder="Project Title" />
+                 <div className="flex justify-between items-start gap-4">
+                    <input type="text" value={project.title} onChange={(e) => handleUpdate('title', e.target.value)} className={`font-bold text-md lg:text-lg text-gray-800 truncate ${INLINE_INPUT_CLASS}`} placeholder="Project Title" />
+                     <button
+                        onClick={() => handleUpdate('isOnHold', !project.isOnHold)}
+                        className={`px-3 py-1 text-xs font-semibold rounded-full shadow-sm transition-colors whitespace-nowrap ${
+                            project.isOnHold
+                            ? 'bg-yellow-500 text-white hover:bg-yellow-600'
+                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                        }`}
+                    >
+                        {project.isOnHold ? 'On Hold' : 'Set Hold'}
+                    </button>
+                </div>
                 <div className="mt-1">
                     <DueDateDisplay
                         dueDate={project.dueDate}
@@ -260,11 +288,19 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, isDraggabl
             </div>
 
             {/* Editor, Master, QC */}
-            <div className="w-full xl:w-auto xl:max-w-sm">
-                 <div className="flex flex-col text-sm space-y-2 text-gray-600">
-                    <div className="flex items-center"><strong className="w-16 flex-shrink-0">Editor:</strong><input type="text" value={project.editor} onChange={(e) => handleUpdate('editor', e.target.value)} className={INLINE_INPUT_CLASS} /></div>
-                    <div className="flex items-center"><strong className="w-16 flex-shrink-0">Master:</strong><input type="text" value={project.master} onChange={(e) => handleUpdate('master', e.target.value)} className={INLINE_INPUT_CLASS} /></div>
-                    <div className="flex items-center"><strong className="w-16 flex-shrink-0">PZ QC:</strong><input type="text" value={project.pzQc} onChange={(e) => handleUpdate('pzQc', e.target.value)} className={INLINE_INPUT_CLASS} /></div>
+            <div className="w-full xl:w-auto xl:max-w-md">
+                 <div className="grid grid-cols-[auto_1fr_1.5fr] gap-x-2 gap-y-2 items-center text-sm text-gray-600">
+                    <strong className="text-right">Editor:</strong>
+                    <input type="text" value={project.editor} onChange={(e) => handleUpdate('editor', e.target.value)} className={INLINE_INPUT_CLASS} placeholder="Name..."/>
+                    <input type="text" value={project.editorNote} onChange={(e) => handleUpdate('editorNote', e.target.value)} className={INLINE_INPUT_CLASS} placeholder="Note..."/>
+
+                    <strong className="text-right">Master:</strong>
+                    <input type="text" value={project.master} onChange={(e) => handleUpdate('master', e.target.value)} className={INLINE_INPUT_CLASS} placeholder="Name..."/>
+                    <input type="text" value={project.masterNote} onChange={(e) => handleUpdate('masterNote', e.target.value)} className={INLINE_INPUT_CLASS} placeholder="Note..."/>
+                    
+                    <strong className="text-right">PZ QC:</strong>
+                    <input type="text" value={project.pzQc} onChange={(e) => handleUpdate('pzQc', e.target.value)} className={INLINE_INPUT_CLASS} placeholder="Name..."/>
+                    <input type="text" value={project.pzQcNote} onChange={(e) => handleUpdate('pzQcNote', e.target.value)} className={INLINE_INPUT_CLASS} placeholder="Note..."/>
                  </div>
             </div>
 
@@ -275,16 +311,16 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, isDraggabl
                     <p className="text-xs text-blue-600 mt-1">EST RT</p>
                 </div>
                 <div className="bg-yellow-50 p-2 rounded-lg w-24">
-                    <input type="number" step="0.01" value={project.totalEdited} onChange={(e) => handleNumberUpdate('totalEdited', e.target.value)} className={`font-semibold text-yellow-800 text-center ${INLINE_INPUT_CLASS}`}/>
-                    <p className="text-xs text-yellow-600 mt-1">Edited</p>
+                    <input type="number" step="0.01" value={project.totalEdited} onChange={(e) => handleNumberUpdate('totalEdited', e.target.value)} className={`font-bold text-lg text-yellow-800 text-center ${INLINE_INPUT_CLASS}`}/>
+                    <p className="text-sm font-medium text-yellow-600 mt-1">Edited</p>
                 </div>
                 <div className="bg-green-50 p-2 rounded-lg w-24">
                     <p className="font-semibold text-green-800 h-6 flex items-center justify-center">{whatsLeft} hrs</p>
                     <p className="text-xs text-green-600 mt-1">What's Left</p>
                 </div>
                 <div className="bg-purple-50 p-2 rounded-lg w-24">
-                    <input type="number" step="0.01" value={project.remainingRaw} onChange={(e) => handleNumberUpdate('remainingRaw', e.target.value)} className={`font-semibold text-purple-800 text-center ${INLINE_INPUT_CLASS}`}/>
-                    <p className="text-xs text-purple-600 mt-1">Remaining RAW</p>
+                    <input type="number" step="0.01" value={project.remainingRaw} onChange={(e) => handleNumberUpdate('remainingRaw', e.target.value)} className={`font-bold text-lg text-purple-800 text-center ${INLINE_INPUT_CLASS}`}/>
+                    <p className="text-sm font-medium text-purple-600 mt-1">Remaining RAW</p>
                 </div>
             </div>
         </div>
@@ -295,7 +331,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, isDraggabl
 // Manager View Component
 interface ManagerViewProps {
     projects: Project[];
-    onUpdate: (id: number, field: keyof Project, value: string | number) => void;
+    onUpdate: (id: number, field: keyof Project, value: string | number | boolean) => void;
     onReorder: (draggedId: number, targetId: number) => void;
 }
 
@@ -360,7 +396,7 @@ const ManagerView: React.FC<ManagerViewProps> = ({ projects, onUpdate, onReorder
 // Client View Component
 interface ClientViewProps {
     projects: Project[];
-    onUpdate: (id: number, field: keyof Project, value: string | number) => void;
+    onUpdate: (id: number, field: keyof Project, value: string | number | boolean) => void;
 }
 
 const ClientView: React.FC<ClientViewProps> = ({ projects, onUpdate }) => {
@@ -410,7 +446,7 @@ const ClientView: React.FC<ClientViewProps> = ({ projects, onUpdate }) => {
 // Editor Row for Editor View
 interface EditorRowProps {
     project: Project;
-    onUpdate: (id: number, field: keyof Project, value: string | number) => void;
+    onUpdate: (id: number, field: keyof Project, value: string | number | boolean) => void;
 }
 
 const EditorRow: React.FC<EditorRowProps> = ({ project, onUpdate }) => {
@@ -422,7 +458,7 @@ const EditorRow: React.FC<EditorRowProps> = ({ project, onUpdate }) => {
     };
 
     return (
-        <div className="grid grid-cols-2 md:grid-cols-7 gap-4 items-center p-3 border-b border-gray-200">
+        <div className={`grid grid-cols-2 md:grid-cols-8 gap-4 items-center p-3 border-b border-gray-200 ${project.isOnHold ? 'bg-pink-50' : ''}`}>
             <div className="col-span-2 md:col-span-3">
                 <input type="text" value={project.title} onChange={(e) => onUpdate(project.id, 'title', e.target.value)} className={`font-semibold text-gray-800 ${INLINE_INPUT_CLASS}`} placeholder="Project Title" />
                 <div className="flex flex-wrap items-center text-sm text-gray-500 mt-1 gap-x-2">
@@ -433,7 +469,8 @@ const EditorRow: React.FC<EditorRowProps> = ({ project, onUpdate }) => {
                     <span className="hidden sm:inline">|</span>
                     <span className="flex items-center">
                         Editor:
-                        <input type="text" value={project.editor} onChange={(e) => onUpdate(project.id, 'editor', e.target.value)} className={`${INLINE_INPUT_CLASS} w-auto ml-1`} placeholder="Editor"/>
+                        <input type="text" value={project.editor} onChange={(e) => onUpdate(project.id, 'editor', e.target.value)} className={`${INLINE_INPUT_CLASS} w-24 ml-1`} placeholder="Name"/>
+                        <input type="text" value={project.editorNote} onChange={(e) => onUpdate(project.id, 'editorNote', e.target.value)} className={`${INLINE_INPUT_CLASS} flex-grow ml-1`} placeholder="Note..."/>
                     </span>
                 </div>
             </div>
@@ -442,7 +479,7 @@ const EditorRow: React.FC<EditorRowProps> = ({ project, onUpdate }) => {
                 <input
                     type="number" step="0.01" value={project.estRt}
                     onChange={(e) => handleInputChange('estRt', e.target.value)}
-                    className={`editor-input w-full border-gray-300 rounded-md shadow-sm text-center p-1`}
+                    className={`w-full border-gray-300 rounded-md shadow-sm text-center p-1`}
                 />
             </div>
             <div>
@@ -450,7 +487,7 @@ const EditorRow: React.FC<EditorRowProps> = ({ project, onUpdate }) => {
                 <input
                     type="number" step="0.01" value={project.totalEdited}
                     onChange={(e) => handleInputChange('totalEdited', e.target.value)}
-                    className="editor-input w-full border-gray-300 rounded-md shadow-sm text-center p-1"
+                    className="font-bold text-lg w-full border-gray-300 rounded-md shadow-sm text-center p-1"
                 />
             </div>
             <div className="text-center bg-gray-50 p-2 rounded-lg">
@@ -462,8 +499,20 @@ const EditorRow: React.FC<EditorRowProps> = ({ project, onUpdate }) => {
                 <input
                     type="number" step="0.01" value={project.remainingRaw}
                     onChange={(e) => handleInputChange('remainingRaw', e.target.value)}
-                    className="editor-input w-full border-gray-300 rounded-md shadow-sm text-center p-1"
+                    className="font-bold text-lg w-full border-gray-300 rounded-md shadow-sm text-center p-1"
                 />
+            </div>
+             <div className="text-center">
+                 <button
+                    onClick={() => onUpdate(project.id, 'isOnHold', !project.isOnHold)}
+                    className={`px-2 py-1.5 text-xs font-semibold rounded-md shadow-sm transition-colors w-full ${
+                        project.isOnHold
+                        ? 'bg-yellow-500 text-white hover:bg-yellow-600'
+                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                    }`}
+                >
+                    {project.isOnHold ? 'On Hold' : 'Set Hold'}
+                </button>
             </div>
         </div>
     );
@@ -473,7 +522,7 @@ const EditorRow: React.FC<EditorRowProps> = ({ project, onUpdate }) => {
 // Editor View Component
 interface EditorViewProps {
     projects: Project[];
-    onUpdate: (id: number, field: keyof Project, value: string | number) => void;
+    onUpdate: (id: number, field: keyof Project, value: string | number | boolean) => void;
 }
 
 const EditorView: React.FC<EditorViewProps> = ({ projects, onUpdate }) => {
@@ -501,7 +550,7 @@ interface ProjectModalProps {
 
 const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, project }) => {
     const [formData, setFormData] = useState<Omit<Project, 'id'>>({
-        title: '', dueDate: '', notes: '', editor: '', pzQc: '', master: '', estRt: 0, totalEdited: 0, remainingRaw: 0
+        title: '', dueDate: '', notes: '', editor: '', editorNote: '', pzQc: '', pzQcNote: '', master: '', masterNote: '', estRt: 0, totalEdited: 0, remainingRaw: 0, isOnHold: false,
     });
     
     const modalRef = useRef<HTMLDivElement>(null);
@@ -509,12 +558,16 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, pr
     React.useEffect(() => {
         if (project) { 
             setFormData({
-                title: project.title, dueDate: project.dueDate, notes: project.notes, editor: project.editor,
-                pzQc: project.pzQc, master: project.master, estRt: project.estRt, totalEdited: project.totalEdited,
+                title: project.title, dueDate: project.dueDate, notes: project.notes,
+                editor: project.editor, editorNote: project.editorNote || '',
+                pzQc: project.pzQc, pzQcNote: project.pzQcNote || '',
+                master: project.master, masterNote: project.masterNote || '',
+                estRt: project.estRt, totalEdited: project.totalEdited,
                 remainingRaw: project.remainingRaw || 0,
+                isOnHold: project.isOnHold || false,
             });
         } else { // For new project
-             setFormData({ title: '', dueDate: new Date().toISOString().split('T')[0], notes: '', editor: '', pzQc: '', master: '', estRt: 0, totalEdited: 0, remainingRaw: 0 });
+             setFormData({ title: '', dueDate: new Date().toISOString().split('T')[0], notes: '', editor: '', editorNote: '', pzQc: '', pzQcNote: '', master: '', masterNote: '', estRt: 0, totalEdited: 0, remainingRaw: 0, isOnHold: false });
         }
     }, [project, isOpen]);
 
@@ -558,6 +611,18 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, pr
                             <input type="date" id="dueDate" value={formData.dueDate} onChange={handleChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" required />
                         </div>
                     </div>
+                     <div className="flex items-center mt-2">
+                        <input
+                            type="checkbox"
+                            id="isOnHold"
+                            checked={formData.isOnHold}
+                            onChange={(e) => setFormData(prev => ({...prev, isOnHold: e.target.checked}))}
+                            className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
+                        />
+                        <label htmlFor="isOnHold" className="ml-2 block text-sm font-medium text-gray-900">
+                           Mark project as "On Hold"
+                        </label>
+                    </div>
                     <div>
                         <label htmlFor="notes" className="block text-sm font-medium text-gray-700">Recording Schedule / Notes</label>
                         <RichTextInput 
@@ -566,20 +631,40 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, pr
                            placeholder="Enter notes here..."
                         />
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
-                            <label htmlFor="editor" className="block text-sm font-medium text-gray-700">Editor</label>
-                            <input type="text" id="editor" value={formData.editor} onChange={handleChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" />
-                        </div>
-                        <div>
-                            <label htmlFor="pzQc" className="block text-sm font-medium text-gray-700">PZ QC</label>
-                            <input type="text" id="pzQc" value={formData.pzQc} onChange={handleChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" />
-                        </div>
-                        <div>
-                            <label htmlFor="master" className="block text-sm font-medium text-gray-700">Master</label>
-                            <input type="text" id="master" value={formData.master} onChange={handleChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" />
-                        </div>
+
+                    <div className="space-y-4">
+                        <fieldset className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label htmlFor="editor" className="block text-sm font-medium text-gray-700">Editor</label>
+                                <input type="text" id="editor" value={formData.editor} onChange={handleChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm" />
+                            </div>
+                             <div>
+                                <label htmlFor="editorNote" className="block text-sm font-medium text-gray-700">Editor Note</label>
+                                <input type="text" id="editorNote" value={formData.editorNote} onChange={handleChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm" />
+                            </div>
+                        </fieldset>
+                         <fieldset className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label htmlFor="master" className="block text-sm font-medium text-gray-700">Master</label>
+                                <input type="text" id="master" value={formData.master} onChange={handleChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm" />
+                            </div>
+                             <div>
+                                <label htmlFor="masterNote" className="block text-sm font-medium text-gray-700">Master Note</label>
+                                <input type="text" id="masterNote" value={formData.masterNote} onChange={handleChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm" />
+                            </div>
+                        </fieldset>
+                        <fieldset className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                            <div>
+                                <label htmlFor="pzQc" className="block text-sm font-medium text-gray-700">PZ QC</label>
+                                <input type="text" id="pzQc" value={formData.pzQc} onChange={handleChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm" />
+                            </div>
+                             <div>
+                                <label htmlFor="pzQcNote" className="block text-sm font-medium text-gray-700">PZ QC Note</label>
+                                <input type="text" id="pzQcNote" value={formData.pzQcNote} onChange={handleChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm" />
+                            </div>
+                        </fieldset>
                     </div>
+
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
                             <label htmlFor="estRt" className="block text-sm font-medium text-gray-700">EST RT (hrs)</label>
@@ -613,25 +698,25 @@ const App: React.FC = () => {
     const [editingProject, setEditingProject] = useState<Project | null>(null);
 
     const sortedProjects = useMemo(() => {
-        // In manager view, we use the manual order. In other views, we sort by date.
         if (viewMode === 'manager') {
             return projects;
         }
         return [...projects].sort((a, b) => {
-            try {
-                const dateA = a.dueDate ? new Date(a.dueDate).getTime() : 0;
-                const dateB = b.dueDate ? new Date(b.dueDate).getTime() : 0;
-                if (isNaN(dateA) || isNaN(dateB)) {
-                    if (isNaN(dateA) && isNaN(dateB)) return 0;
-                    return isNaN(dateA) ? 1 : -1;
-                }
-                if (dateA === 0 && dateB === 0) return 0;
-                if (dateA === 0) return 1;
-                if (dateB === 0) return -1;
-                return dateA - dateB;
-            } catch (e) {
-                return 0; // Fallback
-            }
+            const dateA = a.dueDate ? new Date(a.dueDate) : null;
+            const dateB = b.dueDate ? new Date(b.dueDate) : null;
+    
+            if (!dateA && !dateB) return 0;
+            if (!dateA) return 1;
+            if (!dateB) return -1;
+    
+            const timeA = dateA.getTime();
+            const timeB = dateB.getTime();
+            
+            if (isNaN(timeA) && isNaN(timeB)) return 0;
+            if (isNaN(timeA)) return 1;
+            if (isNaN(timeB)) return -1;
+            
+            return timeA - timeB;
         });
     }, [projects, viewMode]);
 
@@ -643,10 +728,10 @@ const App: React.FC = () => {
         setIsModalOpen(true);
     };
 
-    const handleCloseModal = () => {
+    const handleCloseModal = useCallback(() => {
         setIsModalOpen(false);
         setEditingProject(null);
-    };
+    }, []);
     
     const handleSaveProject = useCallback((projectData: Omit<Project, 'id'> & { id?: number }) => {
         setProjects(prevProjects => {
@@ -654,14 +739,13 @@ const App: React.FC = () => {
                 return prevProjects.map(p => p.id === projectData.id ? { ...p, ...projectData, id: projectData.id } : p);
             } else { 
                 const newProject: Project = { ...projectData, id: Date.now() };
-                // Add new project to the top of the list for immediate visibility in manager view
                 return [newProject, ...prevProjects];
             }
         });
         handleCloseModal();
-    }, []);
+    }, [handleCloseModal]);
 
-    const handleUpdateProjectField = useCallback((id: number, field: keyof Project, value: string | number) => {
+    const handleUpdateProjectField = useCallback((id: number, field: keyof Project, value: string | number | boolean) => {
         setProjects(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p));
     }, []);
     
