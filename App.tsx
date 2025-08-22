@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback, useMemo, useRef } from 'react';
+import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { Project, ViewMode } from './types';
 import { initialProjects } from './data';
 
@@ -129,6 +129,83 @@ const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ dueDate, onUpdate }) =>
     );
 };
 
+// Rich Text Input for Notes
+interface RichTextInputProps {
+    value: string;
+    onChange: (newValue: string) => void;
+    placeholder?: string;
+}
+
+const RichTextInput: React.FC<RichTextInputProps> = ({ value, onChange, placeholder }) => {
+    const editorRef = useRef<HTMLDivElement>(null);
+    const [isFocused, setIsFocused] = useState(false);
+
+    useEffect(() => {
+        if (editorRef.current && value !== editorRef.current.innerHTML) {
+            editorRef.current.innerHTML = value;
+        }
+    }, [value]);
+
+    const handleInput = (e: React.FormEvent<HTMLDivElement>) => {
+        onChange(e.currentTarget.innerHTML);
+    };
+
+    const execCmd = (command: string, val?: string) => {
+        if (editorRef.current) {
+            editorRef.current.focus();
+            document.execCommand(command, false, val);
+            onChange(editorRef.current.innerHTML);
+        }
+    };
+    
+    const isEffectivelyEmpty = !value || value.replace(/<[^>]*>?/gm, '').trim().length === 0;
+
+    return (
+        <div 
+            className="relative bg-white border border-gray-300 rounded-md shadow-sm focus-within:ring-1 focus-within:ring-indigo-500 focus-within:border-indigo-500"
+            onFocus={() => setIsFocused(true)}
+            onBlur={(e) => {
+                if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+                    setIsFocused(false);
+                }
+            }}
+        >
+            {isFocused && (
+                <div className="flex flex-wrap items-center p-1 bg-gray-50 border-b border-gray-200 rounded-t-md space-x-2">
+                    <button type="button" onClick={() => execCmd('bold')} className="px-2 py-1 rounded hover:bg-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-400 font-bold" title="Bold">B</button>
+                    
+                    <div className="flex items-center space-x-1 border-l pl-2 ml-1">
+                        <span className="text-sm text-gray-600 mr-1">Size:</span>
+                        <button type="button" onClick={() => execCmd('fontSize', '2')} className="px-2 py-1 rounded hover:bg-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-400 text-xs" title="Small">S</button>
+                        <button type="button" onClick={() => execCmd('fontSize', '4')} className="px-2 py-1 rounded hover:bg-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-400 text-base" title="Medium">M</button>
+                        <button type="button" onClick={() => execCmd('fontSize', '6')} className="px-2 py-1 rounded hover:bg-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-400 text-lg" title="Large">L</button>
+                    </div>
+                    
+                    <div className="flex items-center space-x-1 border-l pl-2 ml-1">
+                        <span className="text-sm text-gray-600 mr-1">Color:</span>
+                        <button type="button" onClick={() => execCmd('foreColor', '#1f2937')} className="p-1 rounded-full hover:bg-gray-200" title="Black"><span className="block w-4 h-4 rounded-full border bg-gray-800"></span></button>
+                        <button type="button" onClick={() => execCmd('foreColor', '#ef4444')} className="p-1 rounded-full hover:bg-gray-200" title="Red"><span className="block w-4 h-4 rounded-full border bg-red-500"></span></button>
+                        <button type="button" onClick={() => execCmd('foreColor', '#3b82f6')} className="p-1 rounded-full hover:bg-gray-200" title="Blue"><span className="block w-4 h-4 rounded-full border bg-blue-500"></span></button>
+                        <button type="button" onClick={() => execCmd('foreColor', '#22c55e')} className="p-1 rounded-full hover:bg-gray-200" title="Green"><span className="block w-4 h-4 rounded-full border bg-green-500"></span></button>
+                    </div>
+                </div>
+            )}
+            <div className="relative p-2 min-h-[60px]">
+                {isEffectivelyEmpty && (
+                     <div className="absolute top-2 left-2 text-gray-400 pointer-events-none select-none">{placeholder}</div>
+                )}
+                <div
+                    ref={editorRef}
+                    contentEditable
+                    onInput={handleInput}
+                    dangerouslySetInnerHTML={{ __html: value }}
+                    className="w-full h-full focus:outline-none"
+                    spellCheck="false"
+                />
+            </div>
+        </div>
+    );
+};
 
 // Project Card for Manager and Client Views
 interface ProjectCardProps {
@@ -156,7 +233,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, isDraggabl
 
     return (
         <div
-            className={`card bg-white p-4 rounded-lg shadow-md flex flex-col md:flex-row items-start md:items-center gap-4 hover:shadow-lg transition-all duration-300 ${isDraggable ? 'cursor-grab' : ''} ${isDraggingOver ? 'drag-over-active' : ''}`}
+            className={`card bg-white p-4 rounded-lg shadow-md flex flex-col xl:flex-row items-start gap-4 hover:shadow-lg transition-all duration-300 ${isDraggable ? 'cursor-grab' : ''} ${isDraggingOver ? 'drag-over-active' : ''}`}
             draggable={isDraggable}
             onDragStart={(e) => isDraggable && onDragStart?.(e, project)}
             onDragOver={(e) => isDraggable && onDragOver?.(e)}
@@ -164,32 +241,35 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, isDraggabl
             onDrop={(e) => isDraggable && onDrop?.(e, project)}
             data-id={project.id}
         >
-            <div className="flex-grow flex flex-col md:flex-row md:items-center gap-4 w-full">
-                <div className="flex-1 min-w-0">
-                    <input type="text" value={project.title} onChange={(e) => handleUpdate('title', e.target.value)} className={`font-bold text-md lg:text-lg text-gray-800 truncate ${INLINE_INPUT_CLASS}`} placeholder="Project Title" />
-                    <div className="mt-1">
-                        <DueDateDisplay
-                            dueDate={project.dueDate}
-                            onUpdate={(newDate) => handleUpdate('dueDate', newDate)}
-                        />
-                    </div>
-                    <div className="text-sm text-gray-500 mt-2 pt-2 border-t border-gray-200">
-                         <textarea
-                            value={project.notes}
-                            onChange={(e) => handleUpdate('notes', e.target.value)}
-                            rows={2}
-                            placeholder="Notes..."
-                            className={`w-full resize-none ${INLINE_INPUT_CLASS}`}
-                         />
-                    </div>
+            {/* Title, Due Date & Notes */}
+            <div className="flex-1 w-full min-w-0">
+                <input type="text" value={project.title} onChange={(e) => handleUpdate('title', e.target.value)} className={`font-bold text-md lg:text-lg text-gray-800 truncate ${INLINE_INPUT_CLASS}`} placeholder="Project Title" />
+                <div className="mt-1">
+                    <DueDateDisplay
+                        dueDate={project.dueDate}
+                        onUpdate={(newDate) => handleUpdate('dueDate', newDate)}
+                    />
                 </div>
-                <div className="hidden xl:flex flex-col text-sm space-y-2 w-full md:w-auto md:max-w-[200px] text-gray-600">
+                <div className="mt-4">
+                    <RichTextInput 
+                        value={project.notes}
+                        onChange={(newNotes) => handleUpdate('notes', newNotes)}
+                        placeholder="Notes..."
+                    />
+                </div>
+            </div>
+
+            {/* Editor, Master, QC */}
+            <div className="w-full xl:w-auto xl:max-w-sm">
+                 <div className="flex flex-col text-sm space-y-2 text-gray-600">
                     <div className="flex items-center"><strong className="w-16 flex-shrink-0">Editor:</strong><input type="text" value={project.editor} onChange={(e) => handleUpdate('editor', e.target.value)} className={INLINE_INPUT_CLASS} /></div>
                     <div className="flex items-center"><strong className="w-16 flex-shrink-0">Master:</strong><input type="text" value={project.master} onChange={(e) => handleUpdate('master', e.target.value)} className={INLINE_INPUT_CLASS} /></div>
                     <div className="flex items-center"><strong className="w-16 flex-shrink-0">PZ QC:</strong><input type="text" value={project.pzQc} onChange={(e) => handleUpdate('pzQc', e.target.value)} className={INLINE_INPUT_CLASS} /></div>
-                </div>
+                 </div>
             </div>
-            <div className="flex items-center gap-2 text-center text-sm w-full md:w-auto justify-around md:justify-end mt-4 md:mt-0">
+
+            {/* Stats */}
+            <div className="flex items-center gap-2 text-center text-sm w-full md:w-auto justify-around xl:justify-end mt-4 xl:mt-0">
                 <div className="bg-blue-50 p-2 rounded-lg w-24">
                     <input type="number" step="0.01" value={project.estRt} onChange={(e) => handleNumberUpdate('estRt', e.target.value)} className={`font-semibold text-blue-800 text-center ${INLINE_INPUT_CLASS}`}/>
                     <p className="text-xs text-blue-600 mt-1">EST RT</p>
@@ -225,7 +305,7 @@ const ManagerView: React.FC<ManagerViewProps> = ({ projects, onUpdate, onReorder
 
     const handleDragStart = (e: React.DragEvent<HTMLDivElement>, project: Project) => {
         const targetNodeName = (e.target as HTMLElement).nodeName.toLowerCase();
-        if (['input', 'textarea', 'button'].includes(targetNodeName) || (e.target as HTMLElement).closest('button')) {
+        if (['input', 'textarea', 'button'].includes(targetNodeName) || (e.target as HTMLElement).closest('button') || (e.target as HTMLElement).closest('[contenteditable]')) {
             e.preventDefault();
             return;
         }
@@ -480,7 +560,11 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, pr
                     </div>
                     <div>
                         <label htmlFor="notes" className="block text-sm font-medium text-gray-700">Recording Schedule / Notes</label>
-                        <textarea id="notes" rows={3} value={formData.notes} onChange={handleChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500"></textarea>
+                        <RichTextInput 
+                           value={formData.notes}
+                           onChange={(newNotes) => setFormData(prev => ({...prev, notes: newNotes}))}
+                           placeholder="Enter notes here..."
+                        />
                     </div>
                     <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
@@ -529,12 +613,15 @@ const App: React.FC = () => {
     const [editingProject, setEditingProject] = useState<Project | null>(null);
 
     const sortedProjects = useMemo(() => {
+        // In manager view, we use the manual order. In other views, we sort by date.
+        if (viewMode === 'manager') {
+            return projects;
+        }
         return [...projects].sort((a, b) => {
             try {
                 const dateA = a.dueDate ? new Date(a.dueDate).getTime() : 0;
                 const dateB = b.dueDate ? new Date(b.dueDate).getTime() : 0;
                 if (isNaN(dateA) || isNaN(dateB)) {
-                    // Handle invalid dates by pushing them to the end or start
                     if (isNaN(dateA) && isNaN(dateB)) return 0;
                     return isNaN(dateA) ? 1 : -1;
                 }
@@ -543,10 +630,10 @@ const App: React.FC = () => {
                 if (dateB === 0) return -1;
                 return dateA - dateB;
             } catch (e) {
-                return 0; // Fallback for invalid date formats
+                return 0; // Fallback
             }
         });
-    }, [projects]);
+    }, [projects, viewMode]);
 
 
     const handleSwitchView = (mode: ViewMode) => setViewMode(mode);
@@ -567,7 +654,8 @@ const App: React.FC = () => {
                 return prevProjects.map(p => p.id === projectData.id ? { ...p, ...projectData, id: projectData.id } : p);
             } else { 
                 const newProject: Project = { ...projectData, id: Date.now() };
-                return [...prevProjects, newProject];
+                // Add new project to the top of the list for immediate visibility in manager view
+                return [newProject, ...prevProjects];
             }
         });
         handleCloseModal();
@@ -593,9 +681,10 @@ const App: React.FC = () => {
     }, []);
 
     const renderCurrentView = () => {
+        const projectsToDisplay = viewMode === 'manager' ? projects : sortedProjects;
         switch (viewMode) {
             case 'manager':
-                return <ManagerView projects={sortedProjects} onUpdate={handleUpdateProjectField} onReorder={handleReorderProjects} />;
+                return <ManagerView projects={projects} onUpdate={handleUpdateProjectField} onReorder={handleReorderProjects} />;
             case 'client':
                 return <ClientView projects={sortedProjects} onUpdate={handleUpdateProjectField} />;
             case 'editor':
