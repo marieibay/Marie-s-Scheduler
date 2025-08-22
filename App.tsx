@@ -154,13 +154,13 @@ const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ dueDate, originalDueDat
     }, [dueDate]);
     
     const formattedDate = useMemo(() => {
-        if (!dueDate) return 'MM-DD-YY';
+        if (!dueDate) return 'MM/DD/YY';
         try {
             const date = new Date(dueDate + 'T00:00:00');
             const month = String(date.getMonth() + 1).padStart(2, '0');
             const day = String(date.getDate()).padStart(2, '0');
             const year = String(date.getFullYear()).slice(-2);
-            return `${month}-${day}-${year}`;
+            return `${month}/${day}/${year}`;
         } catch (e) {
             return 'Invalid Date';
         }
@@ -218,13 +218,14 @@ interface SelectInputProps {
 }
 
 const SelectInput: React.FC<SelectInputProps> = ({ value, onChange, options, placeholder, className }) => {
-    const [showOptions, setShowOptions] = useState(false);
+    const [isOpen, setIsOpen] = useState(false);
     const wrapperRef = useRef<HTMLDivElement>(null);
 
+    // Close dropdown on click outside
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
-                setShowOptions(false);
+                setIsOpen(false);
             }
         };
         document.addEventListener('mousedown', handleClickOutside);
@@ -235,16 +236,16 @@ const SelectInput: React.FC<SelectInputProps> = ({ value, onChange, options, pla
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         onChange(e.target.value);
-        if (!showOptions) {
-            setShowOptions(true);
+        if (!isOpen) {
+            setIsOpen(true);
         }
     };
 
-    const handleSelectOption = (option: string) => {
+    const handleOptionClick = (option: string) => {
         onChange(option);
-        setShowOptions(false);
+        setIsOpen(false);
     };
-
+    
     const filteredOptions = useMemo(() =>
         options.filter(option =>
             option.toLowerCase().includes((value || '').toLowerCase())
@@ -257,22 +258,18 @@ const SelectInput: React.FC<SelectInputProps> = ({ value, onChange, options, pla
                 type="text"
                 value={value}
                 onChange={handleInputChange}
-                onFocus={() => setShowOptions(true)}
-                onBlur={() => setShowOptions(false)}
+                onFocus={() => setIsOpen(true)}
                 placeholder={placeholder}
                 className={className}
                 autoComplete="off"
             />
-            {showOptions && filteredOptions.length > 0 && (
+            {isOpen && filteredOptions.length > 0 && (
                 <ul className="absolute z-10 w-full bg-white border border-gray-300 rounded-md shadow-lg mt-1 max-h-60 overflow-auto">
                     {filteredOptions.map(option => (
                         <li
                             key={option}
                             className="px-3 py-2 cursor-pointer hover:bg-indigo-100"
-                            onMouseDown={(e) => {
-                                e.preventDefault(); // Prevent input blur before click is handled
-                                handleSelectOption(option);
-                            }}
+                            onMouseDown={() => handleOptionClick(option)}
                         >
                             {option}
                         </li>
@@ -633,12 +630,17 @@ const App: React.FC = () => {
 
 
     const sortedProjects = useMemo(() => {
-        return projects;
+        return [...projects].sort((a, b) => {
+            // Sort by due date, but keep the relative order if sorted manually
+            if (!a.dueDate) return 1;
+            if (!b.dueDate) return -1;
+            return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+        });
     }, [projects]);
     
-    const ongoingProjects = useMemo(() => sortedProjects.filter(p => p.status === 'ongoing'), [sortedProjects]);
-    const doneProjects = useMemo(() => sortedProjects.filter(p => p.status === 'done'), [sortedProjects]);
-    const archivedProjects = useMemo(() => sortedProjects.filter(p => p.status === 'archived'), [sortedProjects]);
+    const ongoingProjects = useMemo(() => projects.filter(p => p.status === 'ongoing'), [projects]);
+    const doneProjects = useMemo(() => projects.filter(p => p.status === 'done'), [projects]);
+    const archivedProjects = useMemo(() => projects.filter(p => p.status === 'archived'), [projects]);
 
     const handleSwitchView = (mode: ViewMode) => setViewMode(mode);
 
@@ -661,7 +663,7 @@ const App: React.FC = () => {
         isOnHold: false,
         status: 'ongoing',
       };
-      setProjects(prev => [...prev, newProject]);
+      setProjects(prev => [newProject, ...prev]);
       setCurrentPage('ongoing');
     }, []);
 
@@ -671,19 +673,18 @@ const App: React.FC = () => {
     
     const handleSortByDate = useCallback(() => {
         setProjects(prevProjects => {
-            const sortFn = (a: Project, b: Project) => {
+            const currentProjects = prevProjects.filter(p => p.status === currentPage);
+            const otherProjects = prevProjects.filter(p => p.status !== currentPage);
+
+            const sortedCurrent = [...currentProjects].sort((a, b) => {
                 if (!a.dueDate) return 1;
                 if (!b.dueDate) return -1;
                 return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
-            };
-            
-            const ongoing = prevProjects.filter(p => p.status === 'ongoing').sort(sortFn);
-            const done = prevProjects.filter(p => p.status === 'done').sort(sortFn);
-            const archived = prevProjects.filter(p => p.status === 'archived').sort(sortFn);
-            
-            return [...ongoing, ...done, ...archived];
+            });
+
+            return [...sortedCurrent, ...otherProjects];
         });
-    }, []);
+    }, [currentPage]);
 
     const handleOpenDeleteModal = useCallback((project: Project) => {
         setProjectToDelete(project);
@@ -702,7 +703,14 @@ const App: React.FC = () => {
 
     const renderCurrentView = () => {
         if (viewMode === 'editor') {
-            return <EditorView projects={ongoingProjects} onUpdate={handleUpdateProjectField} />;
+            const editorProjects = [...projects]
+              .filter(p => p.status === 'ongoing')
+              .sort((a, b) => {
+                if (!a.dueDate) return 1;
+                if (!b.dueDate) return -1;
+                return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+              });
+            return <EditorView projects={editorProjects} onUpdate={handleUpdateProjectField} />;
         }
         
         let projectsForPage: Project[];
@@ -741,7 +749,7 @@ const App: React.FC = () => {
                         </div>
                         <div className="flex items-center space-x-4">
                             {viewMode === 'manager' && (
-                                <button onClick={handleAddNewProject} className="px-4 py-2 bg-indigo-600 text-white rounded-lg shadow hover:bg-indigo-700 transition-colors flex items-center">
+                                <button onClick={handleAddNewProject} className="px-4 py-2 bg-indigo-600 text-white rounded-lg shadow hover:bg-indigo-700 transition-transform duration-150 ease-in-out active:scale-95 active:bg-indigo-800 flex items-center">
                                     <PlusIcon />
                                     <span className="hidden sm:inline">Add Project</span>
                                 </button>
