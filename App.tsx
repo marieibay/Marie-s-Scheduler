@@ -47,26 +47,82 @@ const WarningIconYellow: React.FC = () => (
     </svg>
 );
 
-const CalendarIcon: React.FC = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
-        <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zM4.75 8.5a.75.75 0 000 1.5h10.5a.75.75 0 000-1.5H4.75z" clipRule="evenodd" />
+const TrashIcon: React.FC = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+        <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" />
     </svg>
 );
 
 
 // --- CHILD COMPONENTS ---
 
+// Delete Confirmation Modal
+interface DeleteConfirmationModalProps {
+    projectTitle: string;
+    onConfirm: () => void;
+    onCancel: () => void;
+}
+
+const DeleteConfirmationModal: React.FC<DeleteConfirmationModalProps> = ({ projectTitle, onConfirm, onCancel }) => (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
+        <div className="relative mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
+            <div className="mt-3 text-center">
+                <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
+                    <svg className="h-6 w-6 text-red-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path>
+                    </svg>
+                </div>
+                <h3 className="text-lg leading-6 font-medium text-gray-900 mt-2">Delete Project</h3>
+                <div className="mt-2 px-7 py-3">
+                    <p className="text-sm text-gray-500">
+                        Are you sure you want to delete the project "{projectTitle}"? This action cannot be undone.
+                    </p>
+                </div>
+                <div className="items-center px-4 py-3 space-x-4">
+                    <button
+                        onClick={onCancel}
+                        className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-gray-500"
+                    >
+                        Cancel
+                    </button>
+                    <button
+                        onClick={onConfirm}
+                        className="px-4 py-2 bg-red-600 text-white rounded-md shadow-sm hover:bg-red-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-red-500"
+                    >
+                        Delete
+                    </button>
+                </div>
+            </div>
+        </div>
+    </div>
+);
+
 // Due Date Display with Alerts
 interface DueDateDisplayProps {
     dueDate: string;
+    originalDueDate: string;
     onUpdate: (newDate: string) => void;
 }
 
-const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ dueDate, onUpdate }) => {
+const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ dueDate, originalDueDate, onUpdate }) => {
     const dateInputRef = useRef<HTMLInputElement>(null);
 
-    const handleIconClick = () => {
+    const openPicker = () => {
         dateInputRef.current?.showPicker();
+    };
+    
+    // Using onMouseDown is critical to intercept the event before drag-and-drop logic fires.
+    const handleInteraction = (e: React.MouseEvent | React.KeyboardEvent) => {
+        e.preventDefault();
+        e.stopPropagation(); // Stop the event from bubbling to the draggable parent
+        openPicker();
+    };
+
+
+    const handleKeyDown = (e: React.KeyboardEvent) => {
+        if (e.key === 'Enter' || e.key === ' ') {
+            handleInteraction(e);
+        }
     };
 
     const alertIcon = useMemo(() => {
@@ -75,7 +131,6 @@ const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ dueDate, onUpdate }) =>
         const today = new Date();
         today.setHours(0, 0, 0, 0);
 
-        // Use a more robust date parsing that accounts for timezones
         const dueDateObj = new Date(dueDate + 'T00:00:00');
         if (isNaN(dueDateObj.getTime())) return null;
 
@@ -84,7 +139,7 @@ const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ dueDate, onUpdate }) =>
         const timeDiff = dueDateObj.getTime() - today.getTime();
         const dayDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
 
-        if (dayDiff <= 0) { // Due today or overdue
+        if (dayDiff < 0) { // Overdue
             return <WarningIconRed />;
         } else if (dayDiff <= 7) { // Due within the next 7 days
             return <WarningIconYellow />;
@@ -93,30 +148,31 @@ const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ dueDate, onUpdate }) =>
     }, [dueDate]);
     
     const formattedDate = useMemo(() => {
-        if (!dueDate) return 'N/A';
+        if (!dueDate) return 'MM/DD/YY';
         try {
             const date = new Date(dueDate + 'T00:00:00'); // To avoid timezone issues
             const month = String(date.getMonth() + 1).padStart(2, '0');
             const day = String(date.getDate()).padStart(2, '0');
             const year = String(date.getFullYear()).slice(-2);
-            return `${month}-${day}-${year}`;
+            return `${month}/${day}/${year}`;
         } catch (e) {
             return 'Invalid Date';
         }
     }, [dueDate]);
+    
+    const isUpdated = originalDueDate && dueDate !== originalDueDate;
 
     return (
-        <div className="relative flex items-center gap-2">
+        <div 
+          className="relative flex items-center gap-2 cursor-pointer group" 
+          onMouseDown={handleInteraction}
+          onKeyDown={handleKeyDown}
+          role="button" 
+          tabIndex={0} 
+          aria-label={`Due date: ${formattedDate}. Click to change.`}
+        >
             <span className="text-sm text-gray-600">Due:</span>
-            <span className="font-bold text-red-600 text-lg w-[75px]">{formattedDate}</span>
-            <button
-                type="button"
-                onClick={handleIconClick}
-                className="p-1 -ml-1 rounded-full hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1 transition-colors"
-                aria-label="Change due date"
-            >
-                <CalendarIcon />
-            </button>
+            <span className={`font-bold text-lg w-[85px] group-hover:text-red-700 transition-colors ${!dueDate ? 'text-gray-400' : 'text-red-600'}`}>{formattedDate}</span>
             <input
                 ref={dateInputRef}
                 type="date"
@@ -126,96 +182,11 @@ const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ dueDate, onUpdate }) =>
                 tabIndex={-1}
             />
             <div className="w-5 h-5 flex items-center justify-center">{alertIcon}</div>
-        </div>
-    );
-};
-
-// Rich Text Input for Notes
-interface RichTextInputProps {
-    value: string;
-    onChange: (newValue: string) => void;
-    placeholder?: string;
-}
-
-const RichTextInput: React.FC<RichTextInputProps> = ({ value, onChange, placeholder }) => {
-    const editorRef = useRef<HTMLDivElement>(null);
-    const [isFocused, setIsFocused] = useState(false);
-    
-    const isMounted = useRef(false);
-    useEffect(() => {
-        isMounted.current = true;
-        return () => { isMounted.current = false; };
-    }, []);
-
-    const handleInput = useCallback((e: React.FormEvent<HTMLDivElement>) => {
-        onChange(e.currentTarget.innerHTML);
-    }, [onChange]);
-    
-    const handleFocus = useCallback(() => {
-        setIsFocused(true);
-    }, []);
-    
-    const handleBlur = useCallback(() => {
-        // Delay hiding the toolbar to allow button clicks
-        setTimeout(() => {
-            if(isMounted.current) setIsFocused(false);
-        }, 150);
-    }, []);
-
-    const execCmd = (command: string, val?: string) => {
-        if (editorRef.current) {
-            editorRef.current.focus();
-            document.execCommand(command, false, val);
-            onChange(editorRef.current.innerHTML);
-        }
-    };
-    
-    const isEffectivelyEmpty = !value || value.replace(/<[^>]*>?/gm, '').trim().length === 0;
-    
-     useEffect(() => {
-        if (editorRef.current && editorRef.current.innerHTML !== value) {
-            editorRef.current.innerHTML = value;
-        }
-    }, [value]);
-
-    return (
-        <div 
-            className="relative bg-white border border-gray-300 rounded-md shadow-sm focus-within:ring-1 focus-within:ring-indigo-500 focus-within:border-indigo-500"
-        >
-            {isFocused && (
-                <div className="flex flex-wrap items-center p-1 bg-gray-50 border-b border-gray-200 rounded-t-md space-x-2">
-                    <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => execCmd('bold')} className="px-2 py-1 rounded hover:bg-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-400 font-bold" title="Bold">B</button>
-                    
-                    <div className="flex items-center space-x-1 border-l pl-2 ml-1">
-                        <span className="text-sm text-gray-600 mr-1">Size:</span>
-                        <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => execCmd('fontSize', '2')} className="px-2 py-1 rounded hover:bg-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-400 text-xs" title="Small">S</button>
-                        <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => execCmd('fontSize', '4')} className="px-2 py-1 rounded hover:bg-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-400 text-base" title="Medium">M</button>
-                        <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => execCmd('fontSize', '6')} className="px-2 py-1 rounded hover:bg-gray-200 focus:outline-none focus:ring-1 focus:ring-indigo-400 text-lg" title="Large">L</button>
-                    </div>
-                    
-                    <div className="flex items-center space-x-1 border-l pl-2 ml-1">
-                        <span className="text-sm text-gray-600 mr-1">Color:</span>
-                        <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => execCmd('foreColor', '#1f2937')} className="p-1 rounded-full hover:bg-gray-200" title="Black"><span className="block w-4 h-4 rounded-full border bg-gray-800"></span></button>
-                        <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => execCmd('foreColor', '#ef4444')} className="p-1 rounded-full hover:bg-gray-200" title="Red"><span className="block w-4 h-4 rounded-full border bg-red-500"></span></button>
-                        <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => execCmd('foreColor', '#3b82f6')} className="p-1 rounded-full hover:bg-gray-200" title="Blue"><span className="block w-4 h-4 rounded-full border bg-blue-500"></span></button>
-                        <button type="button" onMouseDown={(e) => e.preventDefault()} onClick={() => execCmd('foreColor', '#22c55e')} className="p-1 rounded-full hover:bg-gray-200" title="Green"><span className="block w-4 h-4 rounded-full border bg-green-500"></span></button>
-                    </div>
-                </div>
+            {isUpdated && (
+                <span className="px-2 py-0.5 text-xs font-semibold text-blue-800 bg-blue-100 rounded-full">
+                    UPDATED
+                </span>
             )}
-            <div className="relative p-2 min-h-[60px]">
-                 {isEffectivelyEmpty && !isFocused && (
-                     <div className="absolute top-2 left-2 text-gray-400 pointer-events-none select-none">{placeholder}</div>
-                )}
-                <div
-                    ref={editorRef}
-                    contentEditable
-                    onInput={handleInput}
-                    onFocus={handleFocus}
-                    onBlur={handleBlur}
-                    className="w-full h-full focus:outline-none"
-                    spellCheck="false"
-                />
-            </div>
         </div>
     );
 };
@@ -232,46 +203,31 @@ interface SelectInputProps {
 const SelectInput: React.FC<SelectInputProps> = ({ value, onChange, options, placeholder, className }) => {
     const [inputValue, setInputValue] = useState(value);
     const [showOptions, setShowOptions] = useState(false);
-    const wrapperRef = useRef<HTMLDivElement>(null);
-
+    
     useEffect(() => {
         setInputValue(value);
     }, [value]);
 
-    useEffect(() => {
-        const handleClickOutside = (event: MouseEvent) => {
-            if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
-                setShowOptions(false);
-                if (inputValue !== value) {
-                   onChange(inputValue); // Save on blur if different
-                }
+    const handleBlur = (e: React.FocusEvent<HTMLDivElement>) => {
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+            setShowOptions(false);
+            if (inputValue !== value) {
+                onChange(inputValue);
             }
-        };
-        document.addEventListener('mousedown', handleClickOutside);
-        return () => {
-            document.removeEventListener('mousedown', handleClickOutside);
-        };
-    }, [wrapperRef, inputValue, value, onChange]);
+        }
+    };
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         setInputValue(e.target.value);
-        setShowOptions(true);
+        if (!showOptions) {
+            setShowOptions(true);
+        }
     };
 
     const handleSelectOption = (option: string) => {
         setInputValue(option);
         onChange(option);
         setShowOptions(false);
-    };
-    
-    const handleBlur = () => {
-        // Timeout allows click event on options to register
-        setTimeout(() => {
-            if (inputValue !== value) {
-                onChange(inputValue);
-            }
-            setShowOptions(false);
-        }, 150);
     };
 
     const filteredOptions = useMemo(() =>
@@ -281,13 +237,12 @@ const SelectInput: React.FC<SelectInputProps> = ({ value, onChange, options, pla
     );
 
     return (
-        <div className="relative w-full" ref={wrapperRef}>
+        <div className="relative w-full" onBlur={handleBlur}>
             <input
                 type="text"
                 value={inputValue}
                 onChange={handleInputChange}
                 onFocus={() => setShowOptions(true)}
-                onBlur={handleBlur}
                 placeholder={placeholder}
                 className={className}
                 autoComplete="off"
@@ -298,7 +253,7 @@ const SelectInput: React.FC<SelectInputProps> = ({ value, onChange, options, pla
                         <li
                             key={option}
                             className="px-3 py-2 cursor-pointer hover:bg-indigo-100"
-                            onMouseDown={() => handleSelectOption(option)} // Use onMouseDown to prevent blur from firing first
+                            onMouseDown={(e) => { e.preventDefault(); handleSelectOption(option); }}
                         >
                             {option}
                         </li>
@@ -314,6 +269,7 @@ interface ProjectCardProps {
     project: Project;
     onUpdate: (id: number, field: keyof Project, value: string | number | boolean) => void;
     isDraggable: boolean;
+    onDelete?: (project: Project) => void;
     onDragStart?: (e: React.DragEvent<HTMLDivElement>, project: Project) => void;
     onDragOver?: (e: React.DragEvent<HTMLDivElement>) => void;
     onDragLeave?: (e: React.DragEvent<HTMLDivElement>) => void;
@@ -322,7 +278,7 @@ interface ProjectCardProps {
 }
 
 
-const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, isDraggable, onDragStart, onDragOver, onDragLeave, onDrop, isDraggingOver }) => {
+const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, isDraggable, onDelete, onDragStart, onDragOver, onDragLeave, onDrop, isDraggingOver }) => {
     const whatsLeft = calculateWhatsLeft(project.estRt, project.totalEdited);
     
     const handleUpdate = (field: keyof Project, value: string | number | boolean) => {
@@ -332,24 +288,30 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, isDraggabl
     const handleNumberUpdate = (field: keyof Project, value: string) => {
         onUpdate(project.id, field, parseFloat(value) || 0);
     };
+    
+    const stopDragFromStarting = (e: React.MouseEvent) => {
+      if (isDraggable) {
+        e.stopPropagation();
+      }
+    };
 
     const renderStatusButtons = () => {
         switch (project.status) {
             case 'ongoing':
                 return (
-                    <button onClick={() => handleUpdate('status', 'done')} className="px-3 py-1 text-xs font-semibold rounded-full shadow-sm transition-colors whitespace-nowrap bg-green-500 text-white hover:bg-green-600">
+                    <button onClick={() => handleUpdate('status', 'done')} className="px-3 py-1 text-xs font-semibold rounded-md shadow-sm transition-colors whitespace-nowrap bg-green-500 text-white hover:bg-green-600">
                         Mark as Done
                     </button>
                 );
             case 'done':
                 return (
-                    <button onClick={() => handleUpdate('status', 'archived')} className="px-3 py-1 text-xs font-semibold rounded-full shadow-sm transition-colors whitespace-nowrap bg-gray-500 text-white hover:bg-gray-600">
+                    <button onClick={() => handleUpdate('status', 'archived')} className="px-3 py-1 text-xs font-semibold rounded-md shadow-sm transition-colors whitespace-nowrap bg-gray-500 text-white hover:bg-gray-600">
                         Archive
                     </button>
                 );
             case 'archived':
                  return (
-                    <button onClick={() => handleUpdate('status', 'done')} className="px-3 py-1 text-xs font-semibold rounded-full shadow-sm transition-colors whitespace-nowrap bg-purple-500 text-white hover:bg-purple-600">
+                    <button onClick={() => handleUpdate('status', 'done')} className="px-3 py-1 text-xs font-semibold rounded-md shadow-sm transition-colors whitespace-nowrap bg-purple-500 text-white hover:bg-purple-600">
                         Unarchive
                     </button>
                 );
@@ -360,82 +322,97 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, isDraggabl
 
     return (
         <div
-            className={`card p-4 rounded-lg shadow-md flex flex-col xl:flex-row items-start gap-4 hover:shadow-lg transition-all duration-300 ${isDraggable ? 'cursor-grab' : ''} ${isDraggingOver ? 'drag-over-active' : ''} ${project.isOnHold ? 'bg-pink-100 border border-pink-300' : 'bg-white'}`}
+            className={`card p-4 rounded-lg shadow-md flex flex-col gap-4 hover:shadow-lg transition-all duration-300 ${isDraggable ? 'cursor-grab' : ''} ${isDraggingOver ? 'drag-over-active' : ''} ${project.isOnHold ? 'bg-pink-100 border border-pink-300' : 'bg-white'}`}
             draggable={isDraggable}
-            onDragStart={(e) => isDraggable && onDragStart?.(e, project)}
-            onDragOver={(e) => isDraggable && onDragOver?.(e)}
-            onDragLeave={(e) => isDraggable && onDragLeave?.(e)}
-            onDrop={(e) => isDraggable && onDrop?.(e, project)}
+            onDragStart={(e) => onDragStart?.(e, project)}
+            onDragOver={(e) => onDragOver?.(e)}
+            onDragLeave={(e) => onDragLeave?.(e)}
+            onDrop={(e) => onDrop?.(e, project)}
             data-id={project.id}
         >
-            {/* Title, Due Date & Notes */}
-            <div className="flex-1 w-full min-w-0">
-                 <div className="flex justify-between items-start gap-4">
-                    <input type="text" value={project.title} onChange={(e) => handleUpdate('title', e.target.value)} className={`font-bold text-md lg:text-lg text-gray-800 truncate ${INLINE_INPUT_CLASS}`} placeholder="Project Title" />
-                    <div className="flex items-center gap-2 flex-shrink-0">
-                         <button
-                            onClick={() => handleUpdate('isOnHold', !project.isOnHold)}
-                            className={`px-3 py-1 text-xs font-semibold rounded-full shadow-sm transition-colors whitespace-nowrap ${
-                                project.isOnHold
-                                ? 'bg-yellow-500 text-white hover:bg-yellow-600'
-                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                            }`}
+            <div className="flex justify-between items-start w-full gap-4" onMouseDown={stopDragFromStarting}>
+                <input 
+                    type="text" 
+                    value={project.title} 
+                    onChange={(e) => handleUpdate('title', e.target.value)} 
+                    className={`font-bold text-lg text-gray-800 flex-grow p-1 -m-1 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors duration-200`} 
+                    placeholder="Project Title"
+                 />
+                <div className="flex items-center gap-2 flex-shrink-0">
+                    <button
+                        onClick={() => handleUpdate('isOnHold', !project.isOnHold)}
+                        className={`px-3 py-1 text-xs font-semibold rounded-md shadow-sm transition-colors whitespace-nowrap ${
+                            project.isOnHold
+                            ? 'bg-yellow-500 text-white hover:bg-yellow-600'
+                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                        }`}
+                    >
+                        {project.isOnHold ? 'On Hold' : 'Set Hold'}
+                    </button>
+                     {renderStatusButtons()}
+                     {onDelete && (
+                        <button
+                            onClick={() => onDelete(project)}
+                            className="p-2 rounded-full text-gray-400 hover:bg-red-100 hover:text-red-600 transition-colors"
+                            aria-label="Delete project"
+                            title="Delete project"
                         >
-                            {project.isOnHold ? 'On Hold' : 'Set Hold'}
+                            <TrashIcon />
                         </button>
-                         {renderStatusButtons()}
-                    </div>
+                     )}
                 </div>
-                <div className="mt-1">
+            </div>
+
+            <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4" onMouseDown={stopDragFromStarting}>
+                <div className="space-y-3">
                     <DueDateDisplay
                         dueDate={project.dueDate}
+                        originalDueDate={project.originalDueDate}
                         onUpdate={(newDate) => handleUpdate('dueDate', newDate)}
                     />
+                    <div className="grid grid-cols-[auto_1fr_1.5fr] gap-x-2 gap-y-2 items-center text-sm text-gray-600">
+                        <strong className="text-right">Editor:</strong>
+                        <SelectInput value={project.editor} onChange={(val) => handleUpdate('editor', val)} options={editors} placeholder="Name..." className={INLINE_INPUT_CLASS} />
+                        <input type="text" value={project.editorNote} onChange={(e) => handleUpdate('editorNote', e.target.value)} className={INLINE_INPUT_CLASS} placeholder="Note..."/>
+
+                        <strong className="text-right">Master:</strong>
+                        <SelectInput value={project.master} onChange={(val) => handleUpdate('master', val)} options={masters} placeholder="Name..." className={INLINE_INPUT_CLASS} />
+                        <input type="text" value={project.masterNote} onChange={(e) => handleUpdate('masterNote', e.target.value)} className={INLINE_INPUT_CLASS} placeholder="Note..."/>
+                        
+                        <strong className="text-right">PZ QC:</strong>
+                        <SelectInput value={project.pzQc} onChange={(val) => handleUpdate('pzQc', val)} options={qcPersonnel} placeholder="Name..." className={INLINE_INPUT_CLASS} />
+                        <input type="text" value={project.pzQcNote} onChange={(e) => handleUpdate('pzQcNote', e.target.value)} className={INLINE_INPUT_CLASS} placeholder="Note..."/>
+                    </div>
                 </div>
-                <div className="mt-4">
-                    <RichTextInput 
-                        value={project.notes}
-                        onChange={(newNotes) => handleUpdate('notes', newNotes)}
-                        placeholder="Notes..."
-                    />
+                <div>
+                    <div className="flex flex-wrap items-center gap-2 text-center text-sm justify-start">
+                        <div className="bg-blue-50 p-2 rounded-lg w-24">
+                            <input type="number" step="0.01" value={project.estRt} onChange={(e) => handleNumberUpdate('estRt', e.target.value)} className={`font-semibold text-blue-800 text-center ${INLINE_INPUT_CLASS}`}/>
+                            <p className="text-xs text-blue-600 mt-1">EST RT</p>
+                        </div>
+                        <div className="bg-yellow-50 p-2 rounded-lg w-24">
+                            <input type="number" step="0.01" value={project.totalEdited} onChange={(e) => handleNumberUpdate('totalEdited', e.target.value)} className={`font-bold text-lg text-yellow-800 text-center ${INLINE_INPUT_CLASS}`}/>
+                            <p className="text-sm font-medium text-yellow-600 mt-1">Edited</p>
+                        </div>
+                        <div className="bg-green-50 p-2 rounded-lg w-24">
+                            <p className="font-semibold text-green-800 h-6 flex items-center justify-center">{whatsLeft} hrs</p>
+                            <p className="text-xs text-green-600 mt-1">What's Left</p>
+                        </div>
+                        <div className="bg-purple-50 p-2 rounded-lg w-24">
+                            <input type="number" step="0.01" value={project.remainingRaw} onChange={(e) => handleNumberUpdate('remainingRaw', e.target.value)} className={`font-bold text-lg text-purple-800 text-center ${INLINE_INPUT_CLASS}`}/>
+                            <p className="text-sm font-medium text-purple-600 mt-1">Remaining RAW</p>
+                        </div>
+                    </div>
                 </div>
             </div>
 
-            {/* Editor, Master, QC */}
-            <div className="w-full xl:w-auto xl:max-w-md">
-                 <div className="grid grid-cols-[auto_1fr_1.5fr] gap-x-2 gap-y-2 items-center text-sm text-gray-600">
-                    <strong className="text-right">Editor:</strong>
-                    <SelectInput value={project.editor} onChange={(val) => handleUpdate('editor', val)} options={editors} placeholder="Name..." className={INLINE_INPUT_CLASS} />
-                    <input type="text" value={project.editorNote} onChange={(e) => handleUpdate('editorNote', e.target.value)} className={INLINE_INPUT_CLASS} placeholder="Note..."/>
-
-                    <strong className="text-right">Master:</strong>
-                    <SelectInput value={project.master} onChange={(val) => handleUpdate('master', val)} options={masters} placeholder="Name..." className={INLINE_INPUT_CLASS} />
-                    <input type="text" value={project.masterNote} onChange={(e) => handleUpdate('masterNote', e.target.value)} className={INLINE_INPUT_CLASS} placeholder="Note..."/>
-                    
-                    <strong className="text-right">PZ QC:</strong>
-                     <SelectInput value={project.pzQc} onChange={(val) => handleUpdate('pzQc', val)} options={qcPersonnel} placeholder="Name..." className={INLINE_INPUT_CLASS} />
-                    <input type="text" value={project.pzQcNote} onChange={(e) => handleUpdate('pzQcNote', e.target.value)} className={INLINE_INPUT_CLASS} placeholder="Note..."/>
-                 </div>
-            </div>
-
-            {/* Stats */}
-            <div className="flex items-center gap-2 text-center text-sm w-full md:w-auto justify-around xl:justify-end mt-4 xl:mt-0">
-                <div className="bg-blue-50 p-2 rounded-lg w-24">
-                    <input type="number" step="0.01" value={project.estRt} onChange={(e) => handleNumberUpdate('estRt', e.target.value)} className={`font-semibold text-blue-800 text-center ${INLINE_INPUT_CLASS}`}/>
-                    <p className="text-xs text-blue-600 mt-1">EST RT</p>
-                </div>
-                <div className="bg-yellow-50 p-2 rounded-lg w-24">
-                    <input type="number" step="0.01" value={project.totalEdited} onChange={(e) => handleNumberUpdate('totalEdited', e.target.value)} className={`font-bold text-lg text-yellow-800 text-center ${INLINE_INPUT_CLASS}`}/>
-                    <p className="text-sm font-medium text-yellow-600 mt-1">Edited</p>
-                </div>
-                <div className="bg-green-50 p-2 rounded-lg w-24">
-                    <p className="font-semibold text-green-800 h-6 flex items-center justify-center">{whatsLeft} hrs</p>
-                    <p className="text-xs text-green-600 mt-1">What's Left</p>
-                </div>
-                <div className="bg-purple-50 p-2 rounded-lg w-24">
-                    <input type="number" step="0.01" value={project.remainingRaw} onChange={(e) => handleNumberUpdate('remainingRaw', e.target.value)} className={`font-bold text-lg text-purple-800 text-center ${INLINE_INPUT_CLASS}`}/>
-                    <p className="text-sm font-medium text-purple-600 mt-1">Remaining RAW</p>
-                </div>
+            <div className="w-full" onMouseDown={stopDragFromStarting}>
+                <textarea
+                    value={project.notes}
+                    onChange={(e) => handleUpdate('notes', e.target.value)}
+                    placeholder="Notes..."
+                    className="w-full h-24 p-2 border border-gray-300 rounded-md shadow-sm focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                />
             </div>
         </div>
     );
@@ -447,23 +424,22 @@ interface ManagerViewProps {
     projects: Project[];
     onUpdate: (id: number, field: keyof Project, value: string | number | boolean) => void;
     onReorder: (draggedId: number, targetId: number) => void;
+    onDelete: (project: Project) => void;
 }
 
-const ManagerView: React.FC<ManagerViewProps> = ({ projects, onUpdate, onReorder }) => {
+const ManagerView: React.FC<ManagerViewProps> = ({ projects, onUpdate, onReorder, onDelete }) => {
     const [draggedItem, setDraggedItem] = useState<Project | null>(null);
     const [draggedOverItem, setDraggedOverItem] = useState<Project | null>(null);
 
     const handleDragStart = (e: React.DragEvent<HTMLDivElement>, project: Project) => {
-        const targetNodeName = (e.target as HTMLElement).nodeName.toLowerCase();
-        if (['input', 'textarea', 'button', 'li'].includes(targetNodeName) || (e.target as HTMLElement).closest('button') || (e.target as HTMLElement).closest('[contenteditable]')) {
-            e.preventDefault();
-            return;
-        }
         setDraggedItem(project);
         e.dataTransfer.effectAllowed = 'move';
-        e.currentTarget.classList.add('dragging');
+        setTimeout(() => {
+            const el = e.currentTarget as HTMLElement;
+            if (el) el.classList.add('dragging');
+        }, 0);
     };
-
+    
     const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
         e.preventDefault();
         const targetId = Number(e.currentTarget.dataset.id);
@@ -481,19 +457,26 @@ const ManagerView: React.FC<ManagerViewProps> = ({ projects, onUpdate, onReorder
         if (draggedItem) {
             onReorder(draggedItem.id, targetProject.id);
         }
-        e.currentTarget.closest('.card')?.classList.remove('dragging');
+        setDraggedItem(null);
+        setDraggedOverItem(null);
+    };
+    
+    const handleDragEnd = (e: React.DragEvent<HTMLDivElement>) => {
+        const el = e.currentTarget as HTMLElement;
+        if(el) el.classList.remove('dragging');
         setDraggedItem(null);
         setDraggedOverItem(null);
     };
 
     return (
-        <main>
+        <div onDragEnd={handleDragEnd}>
             <div className="space-y-4">
                 {projects.length > 0 ? projects.map(project => (
                     <ProjectCard
                         key={project.id}
                         project={project}
                         onUpdate={onUpdate}
+                        onDelete={onDelete}
                         isDraggable={true}
                         onDragStart={handleDragStart}
                         onDragOver={handleDragOver}
@@ -508,7 +491,7 @@ const ManagerView: React.FC<ManagerViewProps> = ({ projects, onUpdate, onReorder
                     </div>
                 )}
             </div>
-        </main>
+        </div>
     );
 };
 
@@ -542,7 +525,7 @@ const ClientView: React.FC<ClientViewProps> = ({ projects, onUpdate }) => {
     }, [groupedProjects]);
 
     return (
-        <main className="space-y-8">
+        <div className="space-y-8">
             {clientOrder.length > 0 ? clientOrder.map(clientName => (
                 <div key={clientName}>
                     <h2 className="text-2xl font-bold mb-4 pb-2 border-b-2 border-indigo-200 text-gray-800">{clientName}</h2>
@@ -563,7 +546,7 @@ const ClientView: React.FC<ClientViewProps> = ({ projects, onUpdate }) => {
                     <p className="text-gray-500 mt-2">Try adding a new project or changing the page view.</p>
                 </div>
             )}
-        </main>
+        </div>
     );
 };
 
@@ -589,6 +572,7 @@ const EditorRow: React.FC<EditorRowProps> = ({ project, onUpdate }) => {
                 <div className="flex flex-wrap items-center text-sm text-gray-500 mt-1 gap-x-2">
                     <DueDateDisplay
                         dueDate={project.dueDate}
+                        originalDueDate={project.originalDueDate}
                         onUpdate={(newDate) => onUpdate(project.id, 'dueDate', newDate)}
                     />
                     <span className="hidden sm:inline">|</span>
@@ -642,7 +626,7 @@ interface EditorViewProps {
 
 const EditorView: React.FC<EditorViewProps> = ({ projects, onUpdate }) => {
     return (
-        <main>
+        <div>
             <div className="bg-white p-4 sm:p-6 rounded-lg shadow-md">
                 <h2 className="text-2xl font-bold mb-4 text-gray-900">Editor Entries</h2>
                 <div className="space-y-2">
@@ -656,197 +640,21 @@ const EditorView: React.FC<EditorViewProps> = ({ projects, onUpdate }) => {
                     )}
                 </div>
             </div>
-        </main>
-    );
-};
-
-// Project Modal Component
-interface ProjectModalProps {
-    isOpen: boolean;
-    onClose: () => void;
-    onSave: (project: Omit<Project, 'id'> & { id?: number }) => void;
-    project: Project | null;
-}
-
-const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, project }) => {
-    const [formData, setFormData] = useState<Omit<Project, 'id'>>({
-        title: '', dueDate: '', notes: '', editor: '', editorNote: '', pzQc: '', pzQcNote: '', master: '', masterNote: '', estRt: 0, totalEdited: 0, remainingRaw: 0, isOnHold: false, status: 'ongoing',
-    });
-    
-    const modalRef = useRef<HTMLDivElement>(null);
-    const MODAL_INPUT_CLASS = "mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500";
-
-    React.useEffect(() => {
-        if (project) { 
-            setFormData({
-                title: project.title, dueDate: project.dueDate, notes: project.notes,
-                editor: project.editor, editorNote: project.editorNote || '',
-                pzQc: project.pzQc, pzQcNote: project.pzQcNote || '',
-                master: project.master, masterNote: project.masterNote || '',
-                estRt: project.estRt, totalEdited: project.totalEdited,
-                remainingRaw: project.remainingRaw || 0,
-                isOnHold: project.isOnHold || false,
-                status: project.status || 'ongoing',
-            });
-        } else { // For new project
-             setFormData({ title: '', dueDate: new Date().toISOString().split('T')[0], notes: '', editor: '', editorNote: '', pzQc: '', pzQcNote: '', master: '', masterNote: '', estRt: 0, totalEdited: 0, remainingRaw: 0, isOnHold: false, status: 'ongoing' });
-        }
-    }, [project, isOpen]);
-
-    if (!isOpen) return null;
-
-    const handleChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
-        const { id, value } = e.target;
-        setFormData(prev => ({ ...prev, [id]: value }));
-    };
-
-    const handleSelectChange = (field: keyof Omit<Project, 'id'>, value: string) => {
-        setFormData(prev => ({ ...prev, [field]: value }));
-    };
-
-    const handleNumberChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const { id, value } = e.target;
-        setFormData(prev => ({ ...prev, [id]: parseFloat(value) || 0 }));
-    };
-
-    const handleSubmit = (e: React.FormEvent) => {
-        e.preventDefault();
-        onSave({ ...formData, id: project?.id });
-    };
-    
-    const handleBackdropClick = (e: React.MouseEvent<HTMLDivElement>) => {
-        if (modalRef.current && e.target === modalRef.current) {
-            onClose();
-        }
-    }
-
-    return (
-        <div ref={modalRef} onClick={handleBackdropClick} className="fixed inset-0 bg-black bg-opacity-50 flex items-center justify-center p-4 z-50 transition-opacity">
-            <div className="bg-white rounded-lg shadow-xl w-full max-w-2xl max-h-[90vh] overflow-y-auto animate-fade-in-up">
-                <div className="p-6 border-b">
-                    <h2 className="text-2xl font-bold">{project ? 'Edit Project' : 'Add New Project'}</h2>
-                </div>
-                <form onSubmit={handleSubmit} className="p-6 space-y-4">
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                        <div>
-                            <label htmlFor="title" className="block text-sm font-medium text-gray-700">Title</label>
-                            <input type="text" id="title" value={formData.title} onChange={handleChange} className={MODAL_INPUT_CLASS} required />
-                        </div>
-                        <div>
-                            <label htmlFor="dueDate" className="block text-sm font-medium text-gray-700">Due Date</label>
-                            <input type="date" id="dueDate" value={formData.dueDate} onChange={handleChange} className={MODAL_INPUT_CLASS} required />
-                        </div>
-                    </div>
-                     <div className="flex items-center mt-2">
-                        <input
-                            type="checkbox"
-                            id="isOnHold"
-                            checked={formData.isOnHold}
-                            onChange={(e) => setFormData(prev => ({...prev, isOnHold: e.target.checked}))}
-                            className="h-4 w-4 text-indigo-600 border-gray-300 rounded focus:ring-indigo-500"
-                        />
-                        <label htmlFor="isOnHold" className="ml-2 block text-sm font-medium text-gray-900">
-                           Mark project as "On Hold"
-                        </label>
-                    </div>
-                    <div>
-                        <label htmlFor="notes" className="block text-sm font-medium text-gray-700">Recording Schedule / Notes</label>
-                        <RichTextInput 
-                           value={formData.notes}
-                           onChange={(newNotes) => setFormData(prev => ({...prev, notes: newNotes}))}
-                           placeholder="Enter notes here..."
-                        />
-                    </div>
-
-                    <div className="space-y-4">
-                        <fieldset className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label htmlFor="editor" className="block text-sm font-medium text-gray-700">Editor</label>
-                                <SelectInput value={formData.editor} onChange={(val) => handleSelectChange('editor', val)} options={editors} className={MODAL_INPUT_CLASS} />
-                            </div>
-                             <div>
-                                <label htmlFor="editorNote" className="block text-sm font-medium text-gray-700">Editor Note</label>
-                                <input type="text" id="editorNote" value={formData.editorNote} onChange={handleChange} className={MODAL_INPUT_CLASS} />
-                            </div>
-                        </fieldset>
-                         <fieldset className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label htmlFor="master" className="block text-sm font-medium text-gray-700">Master</label>
-                                <SelectInput value={formData.master} onChange={(val) => handleSelectChange('master', val)} options={masters} className={MODAL_INPUT_CLASS} />
-                            </div>
-                             <div>
-                                <label htmlFor="masterNote" className="block text-sm font-medium text-gray-700">Master Note</label>
-                                <input type="text" id="masterNote" value={formData.masterNote} onChange={handleChange} className={MODAL_INPUT_CLASS} />
-                            </div>
-                        </fieldset>
-                        <fieldset className="grid grid-cols-1 md:grid-cols-2 gap-4">
-                            <div>
-                                <label htmlFor="pzQc" className="block text-sm font-medium text-gray-700">PZ QC</label>
-                                <SelectInput value={formData.pzQc} onChange={(val) => handleSelectChange('pzQc', val)} options={qcPersonnel} className={MODAL_INPUT_CLASS} />
-                            </div>
-                             <div>
-                                <label htmlFor="pzQcNote" className="block text-sm font-medium text-gray-700">PZ QC Note</label>
-                                <input type="text" id="pzQcNote" value={formData.pzQcNote} onChange={handleChange} className={MODAL_INPUT_CLASS} />
-                            </div>
-                        </fieldset>
-                    </div>
-
-                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
-                        <div>
-                            <label htmlFor="estRt" className="block text-sm font-medium text-gray-700">EST RT (hrs)</label>
-                            <input type="number" step="0.01" id="estRt" value={formData.estRt} onChange={handleNumberChange} className={MODAL_INPUT_CLASS} />
-                        </div>
-                        <div>
-                            <label htmlFor="totalEdited" className="block text-sm font-medium text-gray-700">Total Edited (hrs)</label>
-                            <input type="number" step="0.01" id="totalEdited" value={formData.totalEdited} onChange={handleNumberChange} className={MODAL_INPUT_CLASS} />
-                        </div>
-                        <div>
-                            <label htmlFor="remainingRaw" className="block text-sm font-medium text-gray-700">Remaining RAW (hrs)</label>
-                            <input type="number" step="0.01" id="remainingRaw" value={formData.remainingRaw} onChange={handleNumberChange} className={MODAL_INPUT_CLASS} />
-                        </div>
-                    </div>
-                    <div className="pt-4 flex justify-end space-x-3">
-                        <button type="button" onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300 transition-colors">Cancel</button>
-                        <button type="submit" className="px-4 py-2 bg-indigo-600 text-white rounded-md hover:bg-indigo-700 transition-colors">Save Project</button>
-                    </div>
-                </form>
-            </div>
         </div>
     );
 };
-
 
 // --- MAIN APP COMPONENT ---
 const App: React.FC = () => {
     const [projects, setProjects] = useState<Project[]>(initialProjects);
     const [viewMode, setViewMode] = useState<ViewMode>('manager');
     const [currentPage, setCurrentPage] = useState<'ongoing' | 'done' | 'archived'>('ongoing');
-    const [isModalOpen, setIsModalOpen] = useState(false);
-    const [editingProject, setEditingProject] = useState<Project | null>(null);
+    const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
+
 
     const sortedProjects = useMemo(() => {
-        // Manager view uses manual order, other views are sorted by due date
-        if (viewMode === 'manager') {
-            return projects;
-        }
-        return [...projects].sort((a, b) => {
-            const dateA = a.dueDate ? new Date(a.dueDate) : null;
-            const dateB = b.dueDate ? new Date(b.dueDate) : null;
-    
-            if (!dateA && !dateB) return 0;
-            if (!dateA) return 1;
-            if (!dateB) return -1;
-    
-            const timeA = dateA.getTime();
-            const timeB = dateB.getTime();
-            
-            if (isNaN(timeA) && isNaN(timeB)) return 0;
-            if (isNaN(timeA)) return 1;
-            if (isNaN(timeB)) return -1;
-            
-            return timeA - timeB;
-        });
-    }, [projects, viewMode]);
+        return projects;
+    }, [projects]);
     
     const ongoingProjects = useMemo(() => sortedProjects.filter(p => p.status === 'ongoing'), [sortedProjects]);
     const doneProjects = useMemo(() => sortedProjects.filter(p => p.status === 'done'), [sortedProjects]);
@@ -854,27 +662,28 @@ const App: React.FC = () => {
 
     const handleSwitchView = (mode: ViewMode) => setViewMode(mode);
 
-    const handleOpenModalForNew = () => {
-        setEditingProject(null);
-        setIsModalOpen(true);
-    };
-
-    const handleCloseModal = useCallback(() => {
-        setIsModalOpen(false);
-        setEditingProject(null);
+    const handleAddNewProject = useCallback(() => {
+      const newProject: Project = {
+        id: Date.now(),
+        title: 'New Project - Click to Edit Title',
+        dueDate: '',
+        originalDueDate: '',
+        notes: '',
+        editor: '',
+        editorNote: '',
+        pzQc: '',
+        pzQcNote: '',
+        master: '',
+        masterNote: '',
+        estRt: 0,
+        totalEdited: 0,
+        remainingRaw: 0,
+        isOnHold: false,
+        status: 'ongoing',
+      };
+      setProjects(prev => [...prev, newProject]);
+      setCurrentPage('ongoing');
     }, []);
-    
-    const handleSaveProject = useCallback((projectData: Omit<Project, 'id'> & { id?: number }) => {
-        setProjects(prevProjects => {
-            if (projectData.id) { 
-                return prevProjects.map(p => p.id === projectData.id ? { ...p, ...projectData, id: projectData.id } : p);
-            } else { 
-                const newProject: Project = { ...projectData, id: Date.now(), status: 'ongoing' };
-                return [newProject, ...prevProjects];
-            }
-        });
-        handleCloseModal();
-    }, [handleCloseModal]);
 
     const handleUpdateProjectField = useCallback((id: number, field: keyof Project, value: string | number | boolean) => {
         setProjects(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p));
@@ -885,7 +694,7 @@ const App: React.FC = () => {
             const draggedIndex = currentProjects.findIndex(p => p.id === draggedId);
             const targetIndex = currentProjects.findIndex(p => p.id === targetId);
 
-            if (draggedIndex === -1 || targetIndex === -1) return currentProjects;
+            if (draggedIndex === -1 || targetIndex === -1 || draggedIndex === targetIndex) return currentProjects;
             
             const newProjects = [...currentProjects];
             const [draggedItem] = newProjects.splice(draggedIndex, 1);
@@ -894,37 +703,61 @@ const App: React.FC = () => {
             return newProjects;
         });
     }, []);
+    
+    const handleSortByDate = useCallback(() => {
+        setProjects(prevProjects => {
+            const sortFn = (a: Project, b: Project) => {
+                if (!a.dueDate) return 1;
+                if (!b.dueDate) return -1;
+                return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+            };
+            
+            const ongoing = prevProjects.filter(p => p.status === 'ongoing').sort(sortFn);
+            const done = prevProjects.filter(p => p.status === 'done').sort(sortFn);
+            const archived = prevProjects.filter(p => p.status === 'archived').sort(sortFn);
+            
+            return [...ongoing, ...done, ...archived];
+        });
+    }, []);
+
+    const handleOpenDeleteModal = useCallback((project: Project) => {
+        setProjectToDelete(project);
+    }, []);
+
+    const handleCloseDeleteModal = useCallback(() => {
+        setProjectToDelete(null);
+    }, []);
+
+    const handleConfirmDelete = useCallback(() => {
+        if (projectToDelete) {
+            setProjects(prev => prev.filter(p => p.id !== projectToDelete.id));
+            setProjectToDelete(null);
+        }
+    }, [projectToDelete]);
 
     const renderCurrentView = () => {
         if (viewMode === 'editor') {
-            // Editor view ONLY shows ongoing projects, regardless of the page
             return <EditorView projects={ongoingProjects} onUpdate={handleUpdateProjectField} />;
         }
         
         let projectsForPage: Project[];
-        let projectsForManagerView: Project[];
-
         switch(currentPage) {
             case 'ongoing':
                 projectsForPage = ongoingProjects;
-                projectsForManagerView = projects.filter(p => p.status === 'ongoing');
                 break;
             case 'done':
                 projectsForPage = doneProjects;
-                projectsForManagerView = projects.filter(p => p.status === 'done');
                 break;
             case 'archived':
                 projectsForPage = archivedProjects;
-                projectsForManagerView = projects.filter(p => p.status === 'archived');
                 break;
             default:
                 projectsForPage = [];
-                projectsForManagerView = [];
         }
         
         switch (viewMode) {
             case 'manager':
-                return <ManagerView projects={projectsForManagerView} onUpdate={handleUpdateProjectField} onReorder={handleReorderProjects} />;
+                return <ManagerView projects={projectsForPage} onUpdate={handleUpdateProjectField} onReorder={handleReorderProjects} onDelete={handleOpenDeleteModal} />;
             case 'client':
                 return <ClientView projects={projectsForPage} onUpdate={handleUpdateProjectField} />;
             default:
@@ -933,45 +766,64 @@ const App: React.FC = () => {
     };
 
     return (
-        <div className="container mx-auto p-4 md:p-8">
-            <header className="flex flex-col gap-4 md:flex-row justify-between items-center mb-6">
-                <div>
-                    <h1 className="text-3xl font-bold text-gray-900">Audiobook Production Dashboard</h1>
-                    <p className="text-gray-600">Manage your post-production workflow.</p>
-                </div>
-                <div className="flex items-center space-x-4">
-                    {viewMode === 'manager' && (
-                        <button onClick={handleOpenModalForNew} className="px-4 py-2 bg-indigo-600 text-white rounded-lg shadow hover:bg-indigo-700 transition-colors flex items-center">
-                            <PlusIcon />
-                            <span className="hidden sm:inline">Add Project</span>
-                        </button>
-                    )}
-                </div>
-            </header>
-
-            <div className="bg-white rounded-lg shadow-sm p-4 mb-8">
-                <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-                     {viewMode !== 'editor' && (
-                        <div className="flex items-center space-x-2 bg-gray-100 p-1 rounded-lg">
-                            <button onClick={() => setCurrentPage('ongoing')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${currentPage === 'ongoing' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>Ongoing Edits</button>
-                            <button onClick={() => setCurrentPage('done')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${currentPage === 'done' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>Edit Done</button>
-                            <button onClick={() => setCurrentPage('archived')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${currentPage === 'archived' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>Archived Projects</button>
+        <>
+            <div className="sticky top-0 z-20 w-full bg-gray-100/95 backdrop-blur-sm border-b border-gray-200">
+                <div className="container mx-auto px-4 md:px-8">
+                    <header className="flex flex-col gap-4 md:flex-row justify-between items-center pt-6 pb-4">
+                        <div>
+                            <h1 className="text-3xl font-bold text-gray-900">Audiobook Production Dashboard</h1>
+                            <p className="text-gray-600">Manage your post-production workflow.</p>
                         </div>
-                     )}
-                     {viewMode === 'editor' && <div />} {/* This empty div ensures the view mode toggle stays on the right when page navigation is hidden */}
-                    <div className="flex items-center space-x-2 bg-gray-100 p-1 rounded-lg">
-                        <span className="text-sm font-medium hidden sm:block px-2">View Mode:</span>
-                        <button onClick={() => handleSwitchView('manager')} className={`px-3 py-1 rounded-md text-sm shadow-sm transition-colors ${viewMode === 'manager' ? 'bg-white text-indigo-700' : 'bg-transparent text-gray-700'}`}>Manager</button>
-                        <button onClick={() => handleSwitchView('client')} className={`px-3 py-1 rounded-md text-sm shadow-sm transition-colors ${viewMode === 'client' ? 'bg-white text-indigo-700' : 'bg-transparent text-gray-700'}`}>Client</button>
-                        <button onClick={() => handleSwitchView('editor')} className={`px-3 py-1 rounded-md text-sm shadow-sm transition-colors ${viewMode === 'editor' ? 'bg-white text-indigo-700' : 'bg-transparent text-gray-700'}`}>Editor</button>
+                        <div className="flex items-center space-x-4">
+                            {viewMode === 'manager' && (
+                                <button onClick={handleAddNewProject} className="px-4 py-2 bg-indigo-600 text-white rounded-lg shadow hover:bg-indigo-700 transition-colors flex items-center">
+                                    <PlusIcon />
+                                    <span className="hidden sm:inline">Add Project</span>
+                                </button>
+                            )}
+                        </div>
+                    </header>
+    
+                    <div className="bg-white rounded-lg shadow-sm p-4 mb-4">
+                        <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+                            <div className="flex flex-wrap items-center gap-4">
+                                 {viewMode !== 'editor' && (
+                                    <div className="flex items-center space-x-2 bg-gray-100 p-1 rounded-lg">
+                                        <button onClick={() => setCurrentPage('ongoing')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${currentPage === 'ongoing' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>Ongoing Edits</button>
+                                        <button onClick={() => setCurrentPage('done')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${currentPage === 'done' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>Edit Done</button>
+                                        <button onClick={() => setCurrentPage('archived')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${currentPage === 'archived' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>Archived Projects</button>
+                                    </div>
+                                 )}
+                                 {viewMode === 'manager' && (
+                                    <button onClick={handleSortByDate} className="px-4 py-2 rounded-lg text-sm font-semibold transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300 shadow-sm">
+                                        Sort by Date
+                                    </button>
+                                 )}
+                            </div>
+        
+                            <div className="flex items-center space-x-2 bg-gray-100 p-1 rounded-lg">
+                                <span className="text-sm font-medium hidden sm:block px-2">View Mode:</span>
+                                <button onClick={() => handleSwitchView('manager')} className={`px-3 py-1 rounded-md text-sm shadow-sm transition-colors ${viewMode === 'manager' ? 'bg-white text-indigo-700' : 'bg-transparent text-gray-700'}`}>Manager</button>
+                                <button onClick={() => handleSwitchView('client')} className={`px-3 py-1 rounded-md text-sm shadow-sm transition-colors ${viewMode === 'client' ? 'bg-white text-indigo-700' : 'bg-transparent text-gray-700'}`}>Client</button>
+                                <button onClick={() => handleSwitchView('editor')} className={`px-3 py-1 rounded-md text-sm shadow-sm transition-colors ${viewMode === 'editor' ? 'bg-white text-indigo-700' : 'bg-transparent text-gray-700'}`}>Editor</button>
+                            </div>
+                        </div>
                     </div>
                 </div>
             </div>
 
-            {renderCurrentView()}
+            <main className="container mx-auto px-4 md:px-8 py-8">
+                 {renderCurrentView()}
+            </main>
 
-            <ProjectModal isOpen={isModalOpen} onClose={handleCloseModal} onSave={handleSaveProject} project={editingProject} />
-        </div>
+            {projectToDelete && (
+                <DeleteConfirmationModal
+                    projectTitle={projectToDelete.title}
+                    onConfirm={handleConfirmDelete}
+                    onCancel={handleCloseDeleteModal}
+                />
+            )}
+        </>
     );
 };
 

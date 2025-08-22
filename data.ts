@@ -1,6 +1,6 @@
 import { Project } from './types';
 
-const projectsData: Omit<Project, 'status'>[] = [
+const projectsData: Omit<Project, 'status' | 'originalDueDate'>[] = [
   // Page 1
   { id: 1, dueDate: '2025-06-09', title: 'PRHA#: Disney Blackstone Reformats [OM] - Sending by batch', pzQc: '', pzQcNote: '', notes: '8/12-8/14 (10a-4:30p) ET', editor: '', editorNote: '', master: 'Aileen', masterNote: '', estRt: 0, totalEdited: 0, remainingRaw: 0, isOnHold: false },
   { id: 2, dueDate: '2025-08-22', title: 'The Whistler', pzQc: 'DONE', pzQcNote: '', notes: '8/15 (10a-2p) ET', editor: 'DONE', editorNote: '', master: 'Dan', masterNote: '', estRt: 10, totalEdited: 10.8, remainingRaw: 0, isOnHold: false },
@@ -76,8 +76,13 @@ const projectsData: Omit<Project, 'status'>[] = [
 ];
 
 export const initialProjects: Project[] = projectsData.map(p => {
+    const baseProject = {
+        ...p,
+        originalDueDate: p.dueDate // Set originalDueDate from initial dueDate
+    };
+
     if (p.editor === 'DONE') {
-        return { ...p, status: 'done', editor: '' };
+        return { ...baseProject, status: 'done', editor: '' };
     }
-    return { ...p, status: 'ongoing' };
+    return { ...baseProject, status: 'ongoing' };
 });

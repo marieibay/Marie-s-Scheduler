@@ -3,6 +3,7 @@ export interface Project {
   id: number;
   title: string;
   dueDate: string; // Stored as YYYY-MM-DD
+  originalDueDate: string; // Stored as YYYY-MM-DD
   notes: string;
   editor: string;
   editorNote: string;
