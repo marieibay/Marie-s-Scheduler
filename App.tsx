@@ -218,67 +218,47 @@ interface SelectInputProps {
 }
 
 const SelectInput: React.FC<SelectInputProps> = ({ value, onChange, options, placeholder, className }) => {
-    const [inputValue, setInputValue] = useState(value);
     const [showOptions, setShowOptions] = useState(false);
     const wrapperRef = useRef<HTMLDivElement>(null);
-
-    useEffect(() => {
-        if (document.activeElement !== wrapperRef.current?.querySelector('input')) {
-            setInputValue(value);
-        }
-    }, [value]);
 
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
                 setShowOptions(false);
-                if (inputValue !== value) {
-                    onChange(inputValue);
-                }
             }
         };
         document.addEventListener('mousedown', handleClickOutside);
         return () => {
             document.removeEventListener('mousedown', handleClickOutside);
         };
-    }, [wrapperRef, inputValue, value, onChange]);
+    }, []);
 
     const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-        setInputValue(e.target.value);
-        setShowOptions(true);
+        onChange(e.target.value);
+        if (!showOptions) {
+            setShowOptions(true);
+        }
     };
 
     const handleSelectOption = (option: string) => {
         onChange(option);
-        setInputValue(option);
         setShowOptions(false);
-    };
-    
-    const handleInputBlur = () => {
-        setTimeout(() => {
-            if (wrapperRef.current && !wrapperRef.current.contains(document.activeElement)) {
-                setShowOptions(false);
-                if (inputValue !== value) {
-                    onChange(inputValue);
-                }
-            }
-        }, 150);
     };
 
     const filteredOptions = useMemo(() =>
         options.filter(option =>
-            option.toLowerCase().includes((inputValue || '').toLowerCase())
-        ), [options, inputValue]
+            option.toLowerCase().includes((value || '').toLowerCase())
+        ), [options, value]
     );
 
     return (
         <div className="relative w-full" ref={wrapperRef}>
             <input
                 type="text"
-                value={inputValue}
+                value={value}
                 onChange={handleInputChange}
                 onFocus={() => setShowOptions(true)}
-                onBlur={handleInputBlur}
+                onBlur={() => setShowOptions(false)}
                 placeholder={placeholder}
                 className={className}
                 autoComplete="off"
@@ -289,7 +269,10 @@ const SelectInput: React.FC<SelectInputProps> = ({ value, onChange, options, pla
                         <li
                             key={option}
                             className="px-3 py-2 cursor-pointer hover:bg-indigo-100"
-                            onMouseDown={() => handleSelectOption(option)}
+                            onMouseDown={(e) => {
+                                e.preventDefault(); // Prevent input blur before click is handled
+                                handleSelectOption(option);
+                            }}
                         >
                             {option}
                         </li>
@@ -397,7 +380,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onDelete }
                     )}
                 </div>
 
-                <div className="flex flex-col lg:flex-row lg:items-start lg:gap-6">
+                <div className="flex flex-col md:flex-row md:items-start md:gap-6">
                     {/* Personnel */}
                     <div className="space-y-3 text-sm flex-grow">
                         {/* Editor Row */}
@@ -439,7 +422,7 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onDelete }
                     </div>
 
                     {/* Stats */}
-                    <div className="flex flex-row flex-wrap justify-start gap-2 pt-4 lg:pt-0 flex-shrink-0">
+                    <div className="flex flex-row flex-wrap justify-start gap-2 pt-4 md:pt-0 flex-shrink-0">
                         <div className="bg-blue-50 p-2 rounded-lg w-24 text-center">
                             <input type="number" step="0.01" value={project.estRt} onChange={(e) => handleNumberUpdate('estRt', e.target.value)} className={`font-bold text-lg text-blue-800 text-center ${INLINE_INPUT_CLASS}`}/>
                             <p className="text-xs text-blue-600 mt-1">EST RT</p>
