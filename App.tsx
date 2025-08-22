@@ -343,14 +343,9 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, isDraggabl
                 );
             case 'done':
                 return (
-                    <div className="flex items-center gap-2">
-                        <button onClick={() => handleUpdate('status', 'ongoing')} className="px-3 py-1 text-xs font-semibold rounded-full shadow-sm transition-colors whitespace-nowrap bg-blue-500 text-white hover:bg-blue-600">
-                            Move to Ongoing
-                        </button>
-                        <button onClick={() => handleUpdate('status', 'archived')} className="px-3 py-1 text-xs font-semibold rounded-full shadow-sm transition-colors whitespace-nowrap bg-gray-500 text-white hover:bg-gray-600">
-                            Archive
-                        </button>
-                    </div>
+                    <button onClick={() => handleUpdate('status', 'archived')} className="px-3 py-1 text-xs font-semibold rounded-full shadow-sm transition-colors whitespace-nowrap bg-gray-500 text-white hover:bg-gray-600">
+                        Archive
+                    </button>
                 );
             case 'archived':
                  return (
@@ -588,7 +583,7 @@ const EditorRow: React.FC<EditorRowProps> = ({ project, onUpdate }) => {
     };
 
     return (
-        <div className={`grid grid-cols-2 md:grid-cols-9 gap-4 items-center p-3 border-b border-gray-200 ${project.isOnHold ? 'bg-pink-50' : ''}`}>
+        <div className={`grid grid-cols-2 md:grid-cols-7 gap-4 items-center p-3 border-b border-gray-200 ${project.isOnHold ? 'bg-pink-50' : ''}`}>
             <div className="col-span-2 md:col-span-3">
                 <input type="text" value={project.title} onChange={(e) => onUpdate(project.id, 'title', e.target.value)} className={`font-semibold text-gray-800 ${INLINE_INPUT_CLASS}`} placeholder="Project Title" />
                 <div className="flex flex-wrap items-center text-sm text-gray-500 mt-1 gap-x-2">
@@ -633,26 +628,6 @@ const EditorRow: React.FC<EditorRowProps> = ({ project, onUpdate }) => {
                     onChange={(e) => handleInputChange('remainingRaw', e.target.value)}
                     className="font-bold text-lg w-full border-gray-300 rounded-md shadow-sm text-center p-1"
                 />
-            </div>
-             <div className="text-center">
-                 <button
-                    onClick={() => onUpdate(project.id, 'isOnHold', !project.isOnHold)}
-                    className={`px-2 py-1.5 text-xs font-semibold rounded-md shadow-sm transition-colors w-full mb-1 ${
-                        project.isOnHold
-                        ? 'bg-yellow-500 text-white hover:bg-yellow-600'
-                        : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                    }`}
-                >
-                    {project.isOnHold ? 'On Hold' : 'Set Hold'}
-                </button>
-            </div>
-             <div className="text-center">
-                 <button
-                    onClick={() => onUpdate(project.id, 'status', 'done')}
-                     className="px-2 py-1.5 text-xs font-semibold rounded-md shadow-sm transition-colors w-full bg-green-500 text-white hover:bg-green-600"
-                >
-                    Mark as Done
-                </button>
             </div>
         </div>
     );
@@ -976,11 +951,14 @@ const App: React.FC = () => {
 
             <div className="bg-white rounded-lg shadow-sm p-4 mb-8">
                 <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
-                     <div className="flex items-center space-x-2 bg-gray-100 p-1 rounded-lg">
-                        <button onClick={() => setCurrentPage('ongoing')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${currentPage === 'ongoing' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>Ongoing Edits</button>
-                        <button onClick={() => setCurrentPage('done')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${currentPage === 'done' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>Edit Done</button>
-                        <button onClick={() => setCurrentPage('archived')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${currentPage === 'archived' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>Archived Projects</button>
-                    </div>
+                     {viewMode !== 'editor' && (
+                        <div className="flex items-center space-x-2 bg-gray-100 p-1 rounded-lg">
+                            <button onClick={() => setCurrentPage('ongoing')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${currentPage === 'ongoing' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>Ongoing Edits</button>
+                            <button onClick={() => setCurrentPage('done')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${currentPage === 'done' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>Edit Done</button>
+                            <button onClick={() => setCurrentPage('archived')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${currentPage === 'archived' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>Archived Projects</button>
+                        </div>
+                     )}
+                     {viewMode === 'editor' && <div />} {/* This empty div ensures the view mode toggle stays on the right when page navigation is hidden */}
                     <div className="flex items-center space-x-2 bg-gray-100 p-1 rounded-lg">
                         <span className="text-sm font-medium hidden sm:block px-2">View Mode:</span>
                         <button onClick={() => handleSwitchView('manager')} className={`px-3 py-1 rounded-md text-sm shadow-sm transition-colors ${viewMode === 'manager' ? 'bg-white text-indigo-700' : 'bg-transparent text-gray-700'}`}>Manager</button>
