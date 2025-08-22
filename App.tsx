@@ -347,16 +347,28 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, isDraggabl
             <div className="flex-1 w-full min-w-0">
                  <div className="flex justify-between items-start gap-4">
                     <input type="text" value={project.title} onChange={(e) => handleUpdate('title', e.target.value)} className={`font-bold text-md lg:text-lg text-gray-800 truncate ${INLINE_INPUT_CLASS}`} placeholder="Project Title" />
-                     <button
-                        onClick={() => handleUpdate('isOnHold', !project.isOnHold)}
-                        className={`px-3 py-1 text-xs font-semibold rounded-full shadow-sm transition-colors whitespace-nowrap ${
-                            project.isOnHold
-                            ? 'bg-yellow-500 text-white hover:bg-yellow-600'
-                            : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
-                        }`}
-                    >
-                        {project.isOnHold ? 'On Hold' : 'Set Hold'}
-                    </button>
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                         <button
+                            onClick={() => handleUpdate('isOnHold', !project.isOnHold)}
+                            className={`px-3 py-1 text-xs font-semibold rounded-full shadow-sm transition-colors whitespace-nowrap ${
+                                project.isOnHold
+                                ? 'bg-yellow-500 text-white hover:bg-yellow-600'
+                                : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
+                            }`}
+                        >
+                            {project.isOnHold ? 'On Hold' : 'Set Hold'}
+                        </button>
+                         <button
+                            onClick={() => handleUpdate('status', project.status === 'ongoing' ? 'done' : 'ongoing')}
+                            className={`px-3 py-1 text-xs font-semibold rounded-full shadow-sm transition-colors whitespace-nowrap ${
+                                project.status === 'ongoing'
+                                ? 'bg-green-500 text-white hover:bg-green-600'
+                                : 'bg-gray-500 text-white hover:bg-gray-600'
+                            }`}
+                        >
+                            {project.status === 'ongoing' ? 'Mark as Done' : 'Move to Ongoing'}
+                        </button>
+                    </div>
                 </div>
                 <div className="mt-1">
                     <DueDateDisplay
@@ -461,7 +473,7 @@ const ManagerView: React.FC<ManagerViewProps> = ({ projects, onUpdate, onReorder
     return (
         <main>
             <div className="space-y-4">
-                {projects.map(project => (
+                {projects.length > 0 ? projects.map(project => (
                     <ProjectCard
                         key={project.id}
                         project={project}
@@ -473,7 +485,12 @@ const ManagerView: React.FC<ManagerViewProps> = ({ projects, onUpdate, onReorder
                         onDrop={handleDrop}
                         isDraggingOver={draggedOverItem?.id === project.id}
                     />
-                ))}
+                )) : (
+                    <div className="text-center py-12 bg-white rounded-lg shadow-md">
+                        <h3 className="text-xl font-semibold text-gray-700">No projects to display.</h3>
+                        <p className="text-gray-500 mt-2">Try adding a new project or changing the page view.</p>
+                    </div>
+                )}
             </div>
         </main>
     );
@@ -500,6 +517,7 @@ const ClientView: React.FC<ClientViewProps> = ({ projects, onUpdate }) => {
 
     const clientOrder = useMemo(() => {
         const clients = Object.keys(groupedProjects);
+        if (clients.length === 0) return [];
         return clients.sort((a, b) => {
             if (a === 'PRH') return -1;
             if (b === 'PRH') return 1;
@@ -509,7 +527,7 @@ const ClientView: React.FC<ClientViewProps> = ({ projects, onUpdate }) => {
 
     return (
         <main className="space-y-8">
-            {clientOrder.map(clientName => (
+            {clientOrder.length > 0 ? clientOrder.map(clientName => (
                 <div key={clientName}>
                     <h2 className="text-2xl font-bold mb-4 pb-2 border-b-2 border-indigo-200 text-gray-800">{clientName}</h2>
                     <div className="space-y-4">
@@ -523,7 +541,12 @@ const ClientView: React.FC<ClientViewProps> = ({ projects, onUpdate }) => {
                         ))}
                     </div>
                 </div>
-            ))}
+            )) : (
+                 <div className="text-center py-12 bg-white rounded-lg shadow-md">
+                    <h3 className="text-xl font-semibold text-gray-700">No projects to display.</h3>
+                    <p className="text-gray-500 mt-2">Try adding a new project or changing the page view.</p>
+                </div>
+            )}
         </main>
     );
 };
@@ -544,7 +567,7 @@ const EditorRow: React.FC<EditorRowProps> = ({ project, onUpdate }) => {
     };
 
     return (
-        <div className={`grid grid-cols-2 md:grid-cols-8 gap-4 items-center p-3 border-b border-gray-200 ${project.isOnHold ? 'bg-pink-50' : ''}`}>
+        <div className={`grid grid-cols-2 md:grid-cols-9 gap-4 items-center p-3 border-b border-gray-200 ${project.isOnHold ? 'bg-pink-50' : ''}`}>
             <div className="col-span-2 md:col-span-3">
                 <input type="text" value={project.title} onChange={(e) => onUpdate(project.id, 'title', e.target.value)} className={`font-semibold text-gray-800 ${INLINE_INPUT_CLASS}`} placeholder="Project Title" />
                 <div className="flex flex-wrap items-center text-sm text-gray-500 mt-1 gap-x-2">
@@ -593,13 +616,21 @@ const EditorRow: React.FC<EditorRowProps> = ({ project, onUpdate }) => {
              <div className="text-center">
                  <button
                     onClick={() => onUpdate(project.id, 'isOnHold', !project.isOnHold)}
-                    className={`px-2 py-1.5 text-xs font-semibold rounded-md shadow-sm transition-colors w-full ${
+                    className={`px-2 py-1.5 text-xs font-semibold rounded-md shadow-sm transition-colors w-full mb-1 ${
                         project.isOnHold
                         ? 'bg-yellow-500 text-white hover:bg-yellow-600'
                         : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                     }`}
                 >
                     {project.isOnHold ? 'On Hold' : 'Set Hold'}
+                </button>
+            </div>
+             <div className="text-center">
+                 <button
+                    onClick={() => onUpdate(project.id, 'status', 'done')}
+                     className="px-2 py-1.5 text-xs font-semibold rounded-md shadow-sm transition-colors w-full bg-green-500 text-white hover:bg-green-600"
+                >
+                    Mark as Done
                 </button>
             </div>
         </div>
@@ -619,9 +650,14 @@ const EditorView: React.FC<EditorViewProps> = ({ projects, onUpdate }) => {
             <div className="bg-white p-4 sm:p-6 rounded-lg shadow-md">
                 <h2 className="text-2xl font-bold mb-4 text-gray-900">Editor Entries</h2>
                 <div className="space-y-2">
-                    {projects.map(project => (
+                     {projects.length > 0 ? projects.map(project => (
                         <EditorRow key={project.id} project={project} onUpdate={onUpdate} />
-                    ))}
+                    )) : (
+                         <div className="text-center py-10">
+                            <h3 className="text-lg font-semibold text-gray-600">No ongoing projects.</h3>
+                            <p className="text-gray-500 mt-1">All active edits are complete.</p>
+                        </div>
+                    )}
                 </div>
             </div>
         </main>
@@ -638,7 +674,7 @@ interface ProjectModalProps {
 
 const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, project }) => {
     const [formData, setFormData] = useState<Omit<Project, 'id'>>({
-        title: '', dueDate: '', notes: '', editor: '', editorNote: '', pzQc: '', pzQcNote: '', master: '', masterNote: '', estRt: 0, totalEdited: 0, remainingRaw: 0, isOnHold: false,
+        title: '', dueDate: '', notes: '', editor: '', editorNote: '', pzQc: '', pzQcNote: '', master: '', masterNote: '', estRt: 0, totalEdited: 0, remainingRaw: 0, isOnHold: false, status: 'ongoing',
     });
     
     const modalRef = useRef<HTMLDivElement>(null);
@@ -654,9 +690,10 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, pr
                 estRt: project.estRt, totalEdited: project.totalEdited,
                 remainingRaw: project.remainingRaw || 0,
                 isOnHold: project.isOnHold || false,
+                status: project.status || 'ongoing',
             });
         } else { // For new project
-             setFormData({ title: '', dueDate: new Date().toISOString().split('T')[0], notes: '', editor: '', editorNote: '', pzQc: '', pzQcNote: '', master: '', masterNote: '', estRt: 0, totalEdited: 0, remainingRaw: 0, isOnHold: false });
+             setFormData({ title: '', dueDate: new Date().toISOString().split('T')[0], notes: '', editor: '', editorNote: '', pzQc: '', pzQcNote: '', master: '', masterNote: '', estRt: 0, totalEdited: 0, remainingRaw: 0, isOnHold: false, status: 'ongoing' });
         }
     }, [project, isOpen]);
 
@@ -787,10 +824,12 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, pr
 const App: React.FC = () => {
     const [projects, setProjects] = useState<Project[]>(initialProjects);
     const [viewMode, setViewMode] = useState<ViewMode>('manager');
+    const [currentPage, setCurrentPage] = useState<'ongoing' | 'done'>('ongoing');
     const [isModalOpen, setIsModalOpen] = useState(false);
     const [editingProject, setEditingProject] = useState<Project | null>(null);
 
     const sortedProjects = useMemo(() => {
+        // Manager view uses manual order, other views are sorted by due date
         if (viewMode === 'manager') {
             return projects;
         }
@@ -812,7 +851,9 @@ const App: React.FC = () => {
             return timeA - timeB;
         });
     }, [projects, viewMode]);
-
+    
+    const ongoingProjects = useMemo(() => sortedProjects.filter(p => p.status === 'ongoing'), [sortedProjects]);
+    const doneProjects = useMemo(() => sortedProjects.filter(p => p.status === 'done'), [sortedProjects]);
 
     const handleSwitchView = (mode: ViewMode) => setViewMode(mode);
 
@@ -831,7 +872,7 @@ const App: React.FC = () => {
             if (projectData.id) { 
                 return prevProjects.map(p => p.id === projectData.id ? { ...p, ...projectData, id: projectData.id } : p);
             } else { 
-                const newProject: Project = { ...projectData, id: Date.now() };
+                const newProject: Project = { ...projectData, id: Date.now(), status: 'ongoing' };
                 return [newProject, ...prevProjects];
             }
         });
@@ -858,14 +899,19 @@ const App: React.FC = () => {
     }, []);
 
     const renderCurrentView = () => {
-        const projectsToDisplay = viewMode === 'manager' ? projects : sortedProjects;
+        if (viewMode === 'editor') {
+            // Editor view ONLY shows ongoing projects, regardless of the page
+            return <EditorView projects={ongoingProjects} onUpdate={handleUpdateProjectField} />;
+        }
+        
+        const projectsForPage = currentPage === 'ongoing' ? ongoingProjects : doneProjects;
+        const projectsForManagerView = currentPage === 'ongoing' ? projects.filter(p => p.status === 'ongoing') : projects.filter(p => p.status === 'done');
+        
         switch (viewMode) {
             case 'manager':
-                return <ManagerView projects={projects} onUpdate={handleUpdateProjectField} onReorder={handleReorderProjects} />;
+                return <ManagerView projects={projectsForManagerView} onUpdate={handleUpdateProjectField} onReorder={handleReorderProjects} />;
             case 'client':
-                return <ClientView projects={sortedProjects} onUpdate={handleUpdateProjectField} />;
-            case 'editor':
-                return <EditorView projects={sortedProjects} onUpdate={handleUpdateProjectField} />;
+                return <ClientView projects={projectsForPage} onUpdate={handleUpdateProjectField} />;
             default:
                 return null;
         }
@@ -873,18 +919,12 @@ const App: React.FC = () => {
 
     return (
         <div className="container mx-auto p-4 md:p-8">
-            <header className="flex flex-col md:flex-row justify-between items-center mb-8">
+            <header className="flex flex-col gap-4 md:flex-row justify-between items-center mb-6">
                 <div>
                     <h1 className="text-3xl font-bold text-gray-900">Audiobook Production Dashboard</h1>
                     <p className="text-gray-600">Manage your post-production workflow.</p>
                 </div>
-                <div className="flex items-center space-x-4 mt-4 md:mt-0">
-                    <div className="flex items-center space-x-1 sm:space-x-2 bg-white p-2 rounded-lg shadow-sm">
-                        <span className="text-sm font-medium hidden sm:block">View Mode:</span>
-                        <button onClick={() => handleSwitchView('manager')} className={`px-3 py-1 rounded-md text-sm shadow transition-colors ${viewMode === 'manager' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-700'}`}>Manager</button>
-                        <button onClick={() => handleSwitchView('client')} className={`px-3 py-1 rounded-md text-sm shadow transition-colors ${viewMode === 'client' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-700'}`}>Client</button>
-                        <button onClick={() => handleSwitchView('editor')} className={`px-3 py-1 rounded-md text-sm shadow transition-colors ${viewMode === 'editor' ? 'bg-indigo-600 text-white' : 'bg-gray-200 text-gray-700'}`}>Editor</button>
-                    </div>
+                <div className="flex items-center space-x-4">
                     {viewMode === 'manager' && (
                         <button onClick={handleOpenModalForNew} className="px-4 py-2 bg-indigo-600 text-white rounded-lg shadow hover:bg-indigo-700 transition-colors flex items-center">
                             <PlusIcon />
@@ -893,6 +933,21 @@ const App: React.FC = () => {
                     )}
                 </div>
             </header>
+
+            <div className="bg-white rounded-lg shadow-sm p-4 mb-8">
+                <div className="flex flex-col sm:flex-row justify-between items-center gap-4">
+                     <div className="flex items-center space-x-2 bg-gray-100 p-1 rounded-lg">
+                        <button onClick={() => setCurrentPage('ongoing')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${currentPage === 'ongoing' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>Ongoing Edits</button>
+                        <button onClick={() => setCurrentPage('done')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${currentPage === 'done' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>Edit Done</button>
+                    </div>
+                    <div className="flex items-center space-x-2 bg-gray-100 p-1 rounded-lg">
+                        <span className="text-sm font-medium hidden sm:block px-2">View Mode:</span>
+                        <button onClick={() => handleSwitchView('manager')} className={`px-3 py-1 rounded-md text-sm shadow-sm transition-colors ${viewMode === 'manager' ? 'bg-white text-indigo-700' : 'bg-transparent text-gray-700'}`}>Manager</button>
+                        <button onClick={() => handleSwitchView('client')} className={`px-3 py-1 rounded-md text-sm shadow-sm transition-colors ${viewMode === 'client' ? 'bg-white text-indigo-700' : 'bg-transparent text-gray-700'}`}>Client</button>
+                        <button onClick={() => handleSwitchView('editor')} className={`px-3 py-1 rounded-md text-sm shadow-sm transition-colors ${viewMode === 'editor' ? 'bg-white text-indigo-700' : 'bg-transparent text-gray-700'}`}>Editor</button>
+                    </div>
+                </div>
+            </div>
 
             {renderCurrentView()}
 

@@ -1,6 +1,6 @@
 import { Project } from './types';
 
-export const initialProjects: Project[] = [
+const projectsData: Omit<Project, 'status'>[] = [
   // Page 1
   { id: 1, dueDate: '2025-06-09', title: 'PRHA#: Disney Blackstone Reformats [OM] - Sending by batch', pzQc: '', pzQcNote: '', notes: '8/12-8/14 (10a-4:30p) ET', editor: '', editorNote: '', master: 'Aileen', masterNote: '', estRt: 0, totalEdited: 0, remainingRaw: 0, isOnHold: false },
   { id: 2, dueDate: '2025-08-22', title: 'The Whistler', pzQc: 'DONE', pzQcNote: '', notes: '8/15 (10a-2p) ET', editor: 'DONE', editorNote: '', master: 'Dan', masterNote: '', estRt: 10, totalEdited: 10.8, remainingRaw: 0, isOnHold: false },
@@ -74,3 +74,10 @@ export const initialProjects: Project[] = [
   { id: 66, dueDate: '2025-08-27', title: 'ANATOLE STUDIO: Alchemised [French Audiobook] (Edit Only)', pzQc: '', pzQcNote: '', notes: 'Need another batch for delivery today', editor: 'Jason', editorNote: 'Rovic to edit today', master: '', masterNote: '', estRt: 37, totalEdited: 23.8, remainingRaw: 12.5, isOnHold: false },
   { id: 67, dueDate: '2025-08-27', title: 'ANATOLE: Dernier train pour Kamakura [French Audiobook] (Multiple Narrator) (Edit only) (RUSH)', pzQc: '', pzQcNote: '', notes: '', editor: 'Faye', editorNote: '', master: '', masterNote: '', estRt: 7, totalEdited: 0, remainingRaw: 2, isOnHold: false },
 ];
+
+export const initialProjects: Project[] = projectsData.map(p => {
+    if (p.editor === 'DONE') {
+        return { ...p, status: 'done', editor: '' };
+    }
+    return { ...p, status: 'ongoing' };
+});
