@@ -2,7 +2,7 @@ import { Project } from './types';
 
 const projectsData: Omit<Project, 'status' | 'originalDueDate'>[] = [
   // Page 1
-  { id: 1, dueDate: '2025-06-09', title: 'PRHA#: Disney Blackstone Reformats [OM] - Sending by batch', pzQc: '', pzQcNote: '', notes: '8/12-8/14 (10a-4:30p) ET', editor: '', editorNote: '', master: 'Aileen', masterNote: '', estRt: 0, totalEdited: 0, remainingRaw: 0, isOnHold: false },
+  { id: 1, dueDate: '2025-06-09', title: 'PRHA#: Disney Blackstone Reformats [OM] - Sending by batch', pzQc: '', pzQcNote: '', notes: '8/12-8/14 (10a-4:30p) ET', editor: '', editorNote: '', master: 'Aileen', masterNote: '', estRt: 0, totalEdited: 0, remainingRaw: 0, isOnHold: true },
   { id: 2, dueDate: '2025-08-22', title: 'The Whistler', pzQc: 'DONE', pzQcNote: '', notes: '8/15 (10a-2p) ET', editor: 'DONE', editorNote: '', master: 'Dan', masterNote: '', estRt: 10, totalEdited: 10.8, remainingRaw: 0, isOnHold: false },
   { id: 3, dueDate: '2025-08-25', title: 'Hell Bent (Author Read)', pzQc: 'DONE', pzQcNote: '', notes: '8/12-8/13, 8/22 (11am - 5pm) ET', editor: 'DONE', editorNote: '', master: 'Chiquie', masterNote: '', estRt: 6.75, totalEdited: 6.5, remainingRaw: 0, isOnHold: false },
   { id: 4, dueDate: '2025-08-25', title: 'Reflections on Exile (Self Direct)', pzQc: 'DONE', pzQcNote: '', notes: '07/28, 07/29, 07/31-08/01, 08/04-08/05, 08/07-08/08, 08/11-08/12\n08/14-08/15\n(10a-3:30p ET all dates)', editor: 'DONE', editorNote: '', master: 'RC', masterNote: '', estRt: 20, totalEdited: 33.5, remainingRaw: 0, isOnHold: false },

@@ -53,6 +53,12 @@ const TrashIcon: React.FC = () => (
     </svg>
 );
 
+const CalendarIcon: React.FC = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400 group-hover:text-gray-600" viewBox="0 0 20 20" fill="currentColor">
+      <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
+    </svg>
+);
+
 
 // --- CHILD COMPONENTS ---
 
@@ -110,7 +116,6 @@ const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ dueDate, originalDueDat
 
     useEffect(() => {
         if (isEditing) {
-            // Focus the input element when it becomes visible
             dateInputRef.current?.focus();
         }
     }, [isEditing]);
@@ -149,13 +154,13 @@ const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ dueDate, originalDueDat
     }, [dueDate]);
     
     const formattedDate = useMemo(() => {
-        if (!dueDate) return 'MM/DD/YY';
+        if (!dueDate) return 'MM-DD-YY';
         try {
             const date = new Date(dueDate + 'T00:00:00');
             const month = String(date.getMonth() + 1).padStart(2, '0');
             const day = String(date.getDate()).padStart(2, '0');
             const year = String(date.getFullYear()).slice(-2);
-            return `${month}/${day}/${year}`;
+            return `${month}-${day}-${year}`;
         } catch (e) {
             return 'Invalid Date';
         }
@@ -192,6 +197,7 @@ const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ dueDate, originalDueDat
         >
             <span className="text-sm text-gray-600">Due:</span>
             <span className={`font-bold text-lg w-[85px] group-hover:text-red-700 transition-colors ${!dueDate ? 'text-gray-400' : 'text-red-600'}`}>{formattedDate}</span>
+            <CalendarIcon />
             <div className="w-5 h-5 flex items-center justify-center">{alertIcon}</div>
             {isUpdated && (
                 <span className="px-2 py-0.5 text-xs font-semibold text-blue-800 bg-blue-100 rounded-full">
@@ -216,19 +222,17 @@ const SelectInput: React.FC<SelectInputProps> = ({ value, onChange, options, pla
     const [showOptions, setShowOptions] = useState(false);
     const wrapperRef = useRef<HTMLDivElement>(null);
 
-    // Sync input value with parent prop, but only if not focused to avoid cursor jumping
     useEffect(() => {
         if (document.activeElement !== wrapperRef.current?.querySelector('input')) {
             setInputValue(value);
         }
     }, [value]);
 
-    // Handle clicks outside the component to close the dropdown
     useEffect(() => {
         const handleClickOutside = (event: MouseEvent) => {
             if (wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
                 setShowOptions(false);
-                if (inputValue !== value) { // Commit changes if text is different when closing
+                if (inputValue !== value) {
                     onChange(inputValue);
                 }
             }
@@ -245,14 +249,12 @@ const SelectInput: React.FC<SelectInputProps> = ({ value, onChange, options, pla
     };
 
     const handleSelectOption = (option: string) => {
-        onChange(option); // Update parent state
-        setInputValue(option); // Update local state
-        setShowOptions(false); // Close dropdown
+        onChange(option);
+        setInputValue(option);
+        setShowOptions(false);
     };
     
     const handleInputBlur = () => {
-        // We use a small timeout because a click on a dropdown option will cause a blur event first.
-        // The mousedown handler on the document is the primary way of closing, this is a fallback.
         setTimeout(() => {
             if (wrapperRef.current && !wrapperRef.current.contains(document.activeElement)) {
                 setShowOptions(false);
@@ -344,18 +346,34 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onDelete }
 
     return (
         <div
-            className={`p-4 rounded-lg shadow-md flex flex-col gap-4 hover:shadow-lg transition-all duration-300 ${project.isOnHold ? 'bg-pink-100 border border-pink-300' : 'bg-white'}`}
+            className={`p-4 rounded-lg shadow-md flex flex-col lg:flex-row items-start gap-6 hover:shadow-lg transition-all duration-300 ${project.isOnHold ? 'bg-pink-100 border border-pink-300' : 'bg-white'}`}
             data-id={project.id}
         >
-            <div className="flex justify-between items-start w-full gap-4">
-                <input 
-                    type="text" 
-                    value={project.title} 
-                    onChange={(e) => handleUpdate('title', e.target.value)} 
-                    className={`font-bold text-lg text-gray-800 flex-grow p-1 -m-1 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors duration-200`} 
+            {/* Left Column */}
+            <div className="w-full lg:w-5/12 space-y-3 flex-shrink-0">
+                <input
+                    type="text"
+                    value={project.title}
+                    onChange={(e) => handleUpdate('title', e.target.value)}
+                    className={`font-bold text-lg text-gray-800 w-full p-1 -m-1 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors duration-200`}
                     placeholder="Project Title"
                  />
-                <div className="flex items-center gap-2 flex-shrink-0">
+                <DueDateDisplay
+                    dueDate={project.dueDate}
+                    originalDueDate={project.originalDueDate}
+                    onUpdate={(newDate) => handleUpdate('dueDate', newDate)}
+                />
+                <textarea
+                    value={project.notes}
+                    onChange={(e) => handleUpdate('notes', e.target.value)}
+                    placeholder="Notes..."
+                    className="w-full h-24 p-2 border border-gray-300 rounded-md shadow-sm focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+                />
+            </div>
+
+            {/* Right Column */}
+            <div className="w-full lg:w-7/12 flex-grow">
+                <div className="flex justify-end items-center gap-2 mb-4">
                     <button
                         onClick={() => handleUpdate('isOnHold', !project.isOnHold)}
                         className={`px-3 py-1 text-xs font-semibold rounded-md shadow-sm transition-colors whitespace-nowrap ${
@@ -366,70 +384,80 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onDelete }
                     >
                         {project.isOnHold ? 'On Hold' : 'Set Hold'}
                     </button>
-                     {renderStatusButtons()}
-                     {onDelete && (
+                    {renderStatusButtons()}
+                    {onDelete && (
                         <button
                             onClick={() => onDelete(project)}
-                            className="p-2 rounded-full text-gray-400 hover:bg-red-100 hover:text-red-600 transition-colors"
+                            className="p-1.5 rounded-full text-gray-400 hover:bg-red-100 hover:text-red-600 transition-colors"
                             aria-label="Delete project"
                             title="Delete project"
                         >
                             <TrashIcon />
                         </button>
-                     )}
+                    )}
                 </div>
-            </div>
 
-            <div className="w-full grid grid-cols-1 md:grid-cols-2 gap-x-6 gap-y-4">
-                <div className="space-y-3">
-                    <DueDateDisplay
-                        dueDate={project.dueDate}
-                        originalDueDate={project.originalDueDate}
-                        onUpdate={(newDate) => handleUpdate('dueDate', newDate)}
-                    />
-                    <div className="grid grid-cols-[auto_1fr_1.5fr] gap-x-2 gap-y-2 items-center text-sm text-gray-600">
-                        <strong className="text-right">Editor:</strong>
-                        <SelectInput value={project.editor} onChange={(val) => handleUpdate('editor', val)} options={editors} placeholder="Name..." className={INLINE_INPUT_CLASS} />
-                        <input type="text" value={project.editorNote} onChange={(e) => handleUpdate('editorNote', e.target.value)} className={INLINE_INPUT_CLASS} placeholder="Note..."/>
-
-                        <strong className="text-right">Master:</strong>
-                        <SelectInput value={project.master} onChange={(val) => handleUpdate('master', val)} options={masters} placeholder="Name..." className={INLINE_INPUT_CLASS} />
-                        <input type="text" value={project.masterNote} onChange={(e) => handleUpdate('masterNote', e.target.value)} className={INLINE_INPUT_CLASS} placeholder="Note..."/>
-                        
-                        <strong className="text-right">PZ QC:</strong>
-                        <SelectInput value={project.pzQc} onChange={(val) => handleUpdate('pzQc', val)} options={qcPersonnel} placeholder="Name..." className={INLINE_INPUT_CLASS} />
-                        <input type="text" value={project.pzQcNote} onChange={(e) => handleUpdate('pzQcNote', e.target.value)} className={INLINE_INPUT_CLASS} placeholder="Note..."/>
+                <div className="flex flex-col lg:flex-row lg:items-start lg:gap-6">
+                    {/* Personnel */}
+                    <div className="space-y-3 text-sm flex-grow">
+                        {/* Editor Row */}
+                        <div className="flex items-center gap-2">
+                            <strong className="text-gray-600 w-16 shrink-0 text-right">Editor:</strong>
+                            <div className="flex-grow flex items-center gap-2">
+                                <div className="flex-1 min-w-0">
+                                    <SelectInput value={project.editor} onChange={(val) => handleUpdate('editor', val)} options={editors} placeholder="Name..." className={`${INLINE_INPUT_CLASS} font-semibold text-lg`} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <input type="text" value={project.editorNote} onChange={(e) => handleUpdate('editorNote', e.target.value)} className={INLINE_INPUT_CLASS} placeholder="Note..."/>
+                                </div>
+                            </div>
+                        </div>
+                        {/* Master Row */}
+                        <div className="flex items-center gap-2">
+                            <strong className="text-gray-600 w-16 shrink-0 text-right">Master:</strong>
+                            <div className="flex-grow flex items-center gap-2">
+                                <div className="flex-1 min-w-0">
+                                    <SelectInput value={project.master} onChange={(val) => handleUpdate('master', val)} options={masters} placeholder="Name..." className={`${INLINE_INPUT_CLASS} font-semibold text-lg`} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <input type="text" value={project.masterNote} onChange={(e) => handleUpdate('masterNote', e.target.value)} className={INLINE_INPUT_CLASS} placeholder="Note..."/>
+                                </div>
+                            </div>
+                        </div>
+                        {/* PZ QC Row */}
+                        <div className="flex items-center gap-2">
+                            <strong className="text-gray-600 w-16 shrink-0 text-right">PZ QC:</strong>
+                            <div className="flex-grow flex items-center gap-2">
+                                <div className="flex-1 min-w-0">
+                                    <SelectInput value={project.pzQc} onChange={(val) => handleUpdate('pzQc', val)} options={qcPersonnel} placeholder="Name..." className={`${INLINE_INPUT_CLASS} font-semibold text-lg`} />
+                                </div>
+                                <div className="flex-1 min-w-0">
+                                    <input type="text" value={project.pzQcNote} onChange={(e) => handleUpdate('pzQcNote', e.target.value)} className={INLINE_INPUT_CLASS} placeholder="Note..."/>
+                                </div>
+                            </div>
+                        </div>
                     </div>
-                </div>
-                <div>
-                    <div className="flex flex-wrap items-center gap-2 text-center text-sm justify-start">
-                        <div className="bg-blue-50 p-2 rounded-lg w-24">
-                            <input type="number" step="0.01" value={project.estRt} onChange={(e) => handleNumberUpdate('estRt', e.target.value)} className={`font-semibold text-blue-800 text-center ${INLINE_INPUT_CLASS}`}/>
+
+                    {/* Stats */}
+                    <div className="flex flex-row flex-wrap justify-start gap-2 pt-4 lg:pt-0 flex-shrink-0">
+                        <div className="bg-blue-50 p-2 rounded-lg w-24 text-center">
+                            <input type="number" step="0.01" value={project.estRt} onChange={(e) => handleNumberUpdate('estRt', e.target.value)} className={`font-bold text-lg text-blue-800 text-center ${INLINE_INPUT_CLASS}`}/>
                             <p className="text-xs text-blue-600 mt-1">EST RT</p>
                         </div>
-                        <div className="bg-yellow-50 p-2 rounded-lg w-24">
+                        <div className="bg-yellow-50 p-2 rounded-lg w-24 text-center">
                             <input type="number" step="0.01" value={project.totalEdited} onChange={(e) => handleNumberUpdate('totalEdited', e.target.value)} className={`font-bold text-lg text-yellow-800 text-center ${INLINE_INPUT_CLASS}`}/>
-                            <p className="text-sm font-medium text-yellow-600 mt-1">Edited</p>
+                            <p className="text-xs text-yellow-600 mt-1">Edited</p>
                         </div>
-                        <div className="bg-green-50 p-2 rounded-lg w-24">
-                            <p className="font-semibold text-green-800 h-6 flex items-center justify-center">{whatsLeft} hrs</p>
+                        <div className="bg-green-50 p-2 rounded-lg w-24 text-center">
+                            <p className="font-bold text-lg text-green-800 h-9 flex items-center justify-center">{whatsLeft} hrs</p>
                             <p className="text-xs text-green-600 mt-1">What's Left</p>
                         </div>
-                        <div className="bg-purple-50 p-2 rounded-lg w-24">
+                        <div className="bg-purple-50 p-2 rounded-lg w-24 text-center">
                             <input type="number" step="0.01" value={project.remainingRaw} onChange={(e) => handleNumberUpdate('remainingRaw', e.target.value)} className={`font-bold text-lg text-purple-800 text-center ${INLINE_INPUT_CLASS}`}/>
-                            <p className="text-sm font-medium text-purple-600 mt-1">Remaining RAW</p>
+                            <p className="text-xs text-purple-600 mt-1">Remaining RAW</p>
                         </div>
                     </div>
                 </div>
-            </div>
-
-            <div className="w-full">
-                <textarea
-                    value={project.notes}
-                    onChange={(e) => handleUpdate('notes', e.target.value)}
-                    placeholder="Notes..."
-                    className="w-full h-24 p-2 border border-gray-300 rounded-md shadow-sm focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
-                />
             </div>
         </div>
     );
