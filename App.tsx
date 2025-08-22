@@ -33,8 +33,101 @@ const PlusIcon: React.FC = () => (
     </svg>
 );
 
+const WarningIconRed: React.FC = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-red-500" viewBox="0 0 20 20" fill="currentColor">
+        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.21 3.03-1.742 3.03H4.42c-1.532 0-2.492-1.696-1.742-3.03l5.58-9.92zM10 13a1 1 0 110-2 1 1 0 010 2zm-1-4a1 1 0 011-1h.01a1 1 0 110 2H10a1 1 0 01-1-1z" clipRule="evenodd" />
+    </svg>
+);
+
+const WarningIconYellow: React.FC = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-yellow-500" viewBox="0 0 20 20" fill="currentColor">
+        <path fillRule="evenodd" d="M8.257 3.099c.765-1.36 2.722-1.36 3.486 0l5.58 9.92c.75 1.334-.21 3.03-1.742 3.03H4.42c-1.532 0-2.492-1.696-1.742-3.03l5.58-9.92zM10 13a1 1 0 110-2 1 1 0 010 2zm-1-4a1 1 0 011-1h.01a1 1 0 110 2H10a1 1 0 01-1-1z" clipRule="evenodd" />
+    </svg>
+);
+
+const CalendarIcon: React.FC = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-500" viewBox="0 0 20 20" fill="currentColor">
+        <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zM4.75 8.5a.75.75 0 000 1.5h10.5a.75.75 0 000-1.5H4.75z" clipRule="evenodd" />
+    </svg>
+);
+
 
 // --- CHILD COMPONENTS ---
+
+// Due Date Display with Alerts
+interface DueDateDisplayProps {
+    dueDate: string;
+    onUpdate: (newDate: string) => void;
+}
+
+const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ dueDate, onUpdate }) => {
+    const dateInputRef = useRef<HTMLInputElement>(null);
+
+    const handleIconClick = () => {
+        dateInputRef.current?.showPicker();
+    };
+
+    const alertIcon = useMemo(() => {
+        if (!dueDate) return null;
+
+        const today = new Date();
+        today.setHours(0, 0, 0, 0);
+
+        // Use a more robust date parsing that accounts for timezones
+        const dueDateObj = new Date(dueDate + 'T00:00:00');
+        if (isNaN(dueDateObj.getTime())) return null;
+
+        dueDateObj.setHours(0, 0, 0, 0);
+
+        const timeDiff = dueDateObj.getTime() - today.getTime();
+        const dayDiff = Math.ceil(timeDiff / (1000 * 3600 * 24));
+
+        if (dayDiff <= 0) { // Due today or overdue
+            return <WarningIconRed />;
+        } else if (dayDiff <= 7) { // Due within the next 7 days
+            return <WarningIconYellow />;
+        }
+        return null;
+    }, [dueDate]);
+    
+    const formattedDate = useMemo(() => {
+        if (!dueDate) return 'N/A';
+        try {
+            const date = new Date(dueDate + 'T00:00:00'); // To avoid timezone issues
+            const month = String(date.getMonth() + 1).padStart(2, '0');
+            const day = String(date.getDate()).padStart(2, '0');
+            const year = String(date.getFullYear()).slice(-2);
+            return `${month}-${day}-${year}`;
+        } catch (e) {
+            return 'Invalid Date';
+        }
+    }, [dueDate]);
+
+    return (
+        <div className="relative flex items-center gap-2">
+            <span className="text-sm text-gray-600">Due:</span>
+            <span className="font-bold text-red-600 text-lg w-[75px]">{formattedDate}</span>
+            <button
+                type="button"
+                onClick={handleIconClick}
+                className="p-1 -ml-1 rounded-full hover:bg-gray-200 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-1 transition-colors"
+                aria-label="Change due date"
+            >
+                <CalendarIcon />
+            </button>
+            <input
+                ref={dateInputRef}
+                type="date"
+                value={dueDate}
+                onChange={(e) => onUpdate(e.target.value)}
+                className="absolute opacity-0 w-0 h-0 pointer-events-none"
+                tabIndex={-1}
+            />
+            <div className="w-5 h-5 flex items-center justify-center">{alertIcon}</div>
+        </div>
+    );
+};
+
 
 // Project Card for Manager and Client Views
 interface ProjectCardProps {
@@ -73,9 +166,11 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, isDraggabl
             <div className="flex-grow flex flex-col md:flex-row md:items-center gap-4 w-full">
                 <div className="flex-1 min-w-0">
                     <input type="text" value={project.title} onChange={(e) => handleUpdate('title', e.target.value)} className={`font-bold text-md lg:text-lg text-gray-800 truncate ${INLINE_INPUT_CLASS}`} placeholder="Project Title" />
-                    <div className="flex items-center text-sm text-gray-600 mt-1">
-                        <span>Due:</span>
-                        <input type="date" value={project.dueDate} onChange={(e) => handleUpdate('dueDate', e.target.value)} className={`font-bold text-red-600 ${INLINE_INPUT_CLASS} w-auto ml-1`}/>
+                    <div className="mt-1">
+                        <DueDateDisplay
+                            dueDate={project.dueDate}
+                            onUpdate={(newDate) => handleUpdate('dueDate', newDate)}
+                        />
                     </div>
                     <div className="text-sm text-gray-500 mt-2 pt-2 border-t border-gray-200">
                          <textarea
@@ -125,7 +220,7 @@ const ManagerView: React.FC<ManagerViewProps> = ({ projects, onUpdate, onReorder
 
     const handleDragStart = (e: React.DragEvent<HTMLDivElement>, project: Project) => {
         const targetNodeName = (e.target as HTMLElement).nodeName.toLowerCase();
-        if (['input', 'textarea'].includes(targetNodeName)) {
+        if (['input', 'textarea', 'button'].includes(targetNodeName) || (e.target as HTMLElement).closest('button')) {
             e.preventDefault();
             return;
         }
@@ -245,11 +340,16 @@ const EditorRow: React.FC<EditorRowProps> = ({ project, onUpdate }) => {
         <div className="grid grid-cols-2 md:grid-cols-6 gap-4 items-center p-3 border-b border-gray-200">
             <div className="col-span-2 md:col-span-3">
                 <input type="text" value={project.title} onChange={(e) => onUpdate(project.id, 'title', e.target.value)} className={`font-semibold text-gray-800 ${INLINE_INPUT_CLASS}`} placeholder="Project Title" />
-                <div className="flex items-center text-sm text-gray-500 mt-1">
-                    Due: 
-                    <input type="date" value={project.dueDate} onChange={(e) => onUpdate(project.id, 'dueDate', e.target.value)} className={`font-bold text-red-600 ${INLINE_INPUT_CLASS} w-auto mx-1`} />
-                    | Editor: 
-                    <input type="text" value={project.editor} onChange={(e) => onUpdate(project.id, 'editor', e.target.value)} className={`${INLINE_INPUT_CLASS} w-auto ml-1`} placeholder="Editor"/>
+                <div className="flex flex-wrap items-center text-sm text-gray-500 mt-1 gap-x-2">
+                    <DueDateDisplay
+                        dueDate={project.dueDate}
+                        onUpdate={(newDate) => onUpdate(project.id, 'dueDate', newDate)}
+                    />
+                    <span className="hidden sm:inline">|</span>
+                    <span className="flex items-center">
+                        Editor:
+                        <input type="text" value={project.editor} onChange={(e) => onUpdate(project.id, 'editor', e.target.value)} className={`${INLINE_INPUT_CLASS} w-auto ml-1`} placeholder="Editor"/>
+                    </span>
                 </div>
             </div>
             <div className="text-center">
@@ -412,14 +512,24 @@ const App: React.FC = () => {
 
     const sortedProjects = useMemo(() => {
         return [...projects].sort((a, b) => {
-            const dateA = a.dueDate ? new Date(a.dueDate).getTime() : 0;
-            const dateB = b.dueDate ? new Date(b.dueDate).getTime() : 0;
-            if (dateA === 0 && dateB === 0) return 0;
-            if (dateA === 0) return 1;
-            if (dateB === 0) return -1;
-            return dateA - dateB;
+            try {
+                const dateA = a.dueDate ? new Date(a.dueDate).getTime() : 0;
+                const dateB = b.dueDate ? new Date(b.dueDate).getTime() : 0;
+                if (isNaN(dateA) || isNaN(dateB)) {
+                    // Handle invalid dates by pushing them to the end or start
+                    if (isNaN(dateA) && isNaN(dateB)) return 0;
+                    return isNaN(dateA) ? 1 : -1;
+                }
+                if (dateA === 0 && dateB === 0) return 0;
+                if (dateA === 0) return 1;
+                if (dateB === 0) return -1;
+                return dateA - dateB;
+            } catch (e) {
+                return 0; // Fallback for invalid date formats
+            }
         });
     }, [projects]);
+
 
     const handleSwitchView = (mode: ViewMode) => setViewMode(mode);
 
@@ -467,7 +577,7 @@ const App: React.FC = () => {
     const renderCurrentView = () => {
         switch (viewMode) {
             case 'manager':
-                return <ManagerView projects={projects} onUpdate={handleUpdateProjectField} onReorder={handleReorderProjects} />;
+                return <ManagerView projects={sortedProjects} onUpdate={handleUpdateProjectField} onReorder={handleReorderProjects} />;
             case 'client':
                 return <ClientView projects={sortedProjects} onUpdate={handleUpdateProjectField} />;
             case 'editor':
