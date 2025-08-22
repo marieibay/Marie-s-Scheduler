@@ -9,6 +9,7 @@ export interface Project {
   master: string;
   estRt: number;
   totalEdited: number;
+  remainingRaw: number;
 }
 
 export type ViewMode = 'manager' | 'editor' | 'client';

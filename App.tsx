@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useMemo, useRef } from 'react';
 import { Project, ViewMode } from './types';
 import { initialProjects } from './data';
@@ -201,6 +202,10 @@ const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, isDraggabl
                     <p className="font-semibold text-green-800 h-6 flex items-center justify-center">{whatsLeft} hrs</p>
                     <p className="text-xs text-green-600 mt-1">What's Left</p>
                 </div>
+                <div className="bg-purple-50 p-2 rounded-lg w-24">
+                    <input type="number" step="0.01" value={project.remainingRaw} onChange={(e) => handleNumberUpdate('remainingRaw', e.target.value)} className={`font-semibold text-purple-800 text-center ${INLINE_INPUT_CLASS}`}/>
+                    <p className="text-xs text-purple-600 mt-1">Remaining RAW</p>
+                </div>
             </div>
         </div>
     );
@@ -337,7 +342,7 @@ const EditorRow: React.FC<EditorRowProps> = ({ project, onUpdate }) => {
     };
 
     return (
-        <div className="grid grid-cols-2 md:grid-cols-6 gap-4 items-center p-3 border-b border-gray-200">
+        <div className="grid grid-cols-2 md:grid-cols-7 gap-4 items-center p-3 border-b border-gray-200">
             <div className="col-span-2 md:col-span-3">
                 <input type="text" value={project.title} onChange={(e) => onUpdate(project.id, 'title', e.target.value)} className={`font-semibold text-gray-800 ${INLINE_INPUT_CLASS}`} placeholder="Project Title" />
                 <div className="flex flex-wrap items-center text-sm text-gray-500 mt-1 gap-x-2">
@@ -371,6 +376,14 @@ const EditorRow: React.FC<EditorRowProps> = ({ project, onUpdate }) => {
             <div className="text-center bg-gray-50 p-2 rounded-lg">
                 <p className="font-medium">{whatsLeft}</p>
                 <p className="text-xs text-gray-500">What's Left</p>
+            </div>
+             <div>
+                <label className="text-xs text-gray-500 block text-center mb-1">Remaining RAW</label>
+                <input
+                    type="number" step="0.01" value={project.remainingRaw}
+                    onChange={(e) => handleInputChange('remainingRaw', e.target.value)}
+                    className="editor-input w-full border-gray-300 rounded-md shadow-sm text-center p-1"
+                />
             </div>
         </div>
     );
@@ -408,7 +421,7 @@ interface ProjectModalProps {
 
 const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, project }) => {
     const [formData, setFormData] = useState<Omit<Project, 'id'>>({
-        title: '', dueDate: '', notes: '', editor: '', pzQc: '', master: '', estRt: 0, totalEdited: 0
+        title: '', dueDate: '', notes: '', editor: '', pzQc: '', master: '', estRt: 0, totalEdited: 0, remainingRaw: 0
     });
     
     const modalRef = useRef<HTMLDivElement>(null);
@@ -418,9 +431,10 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, pr
             setFormData({
                 title: project.title, dueDate: project.dueDate, notes: project.notes, editor: project.editor,
                 pzQc: project.pzQc, master: project.master, estRt: project.estRt, totalEdited: project.totalEdited,
+                remainingRaw: project.remainingRaw || 0,
             });
         } else { // For new project
-             setFormData({ title: '', dueDate: new Date().toISOString().split('T')[0], notes: '', editor: '', pzQc: '', master: '', estRt: 0, totalEdited: 0 });
+             setFormData({ title: '', dueDate: new Date().toISOString().split('T')[0], notes: '', editor: '', pzQc: '', master: '', estRt: 0, totalEdited: 0, remainingRaw: 0 });
         }
     }, [project, isOpen]);
 
@@ -482,7 +496,7 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, pr
                             <input type="text" id="master" value={formData.master} onChange={handleChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" />
                         </div>
                     </div>
-                    <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                         <div>
                             <label htmlFor="estRt" className="block text-sm font-medium text-gray-700">EST RT (hrs)</label>
                             <input type="number" step="0.01" id="estRt" value={formData.estRt} onChange={handleNumberChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" />
@@ -490,6 +504,10 @@ const ProjectModal: React.FC<ProjectModalProps> = ({ isOpen, onClose, onSave, pr
                         <div>
                             <label htmlFor="totalEdited" className="block text-sm font-medium text-gray-700">Total Edited (hrs)</label>
                             <input type="number" step="0.01" id="totalEdited" value={formData.totalEdited} onChange={handleNumberChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" />
+                        </div>
+                        <div>
+                            <label htmlFor="remainingRaw" className="block text-sm font-medium text-gray-700">Remaining RAW (hrs)</label>
+                            <input type="number" step="0.01" id="remainingRaw" value={formData.remainingRaw} onChange={handleNumberChange} className="mt-1 block w-full border-gray-300 rounded-md shadow-sm focus:ring-indigo-500 focus:border-indigo-500" />
                         </div>
                     </div>
                     <div className="pt-4 flex justify-end space-x-3">
