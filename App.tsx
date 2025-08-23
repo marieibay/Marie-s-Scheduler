@@ -46,8 +46,20 @@ const EditorPage: React.FC = () => {
     }, []);
 
     const handleUpdateProjectField = useCallback(async (id: number, field: keyof Project, value: string | number | boolean) => {
+        // Optimistically update editor view
+        setProjects(currentProjects =>
+            currentProjects.map(p =>
+                p.id === id ? { ...p, [field]: value } : p
+            )
+        );
         const { error } = await supabase.from('projects').update({ [field]: value }).eq('id', id);
-        if (error) console.error('Error updating project field:', error.message);
+        if (error) {
+            console.error('Error updating project field:', error.message);
+            // Simple revert on error by refetching
+             const { data, error: fetchError } = await supabase.from('projects').select('*');
+            if (fetchError) console.error('Error refetching editor projects:', fetchError.message);
+            else setProjects(data || []);
+        }
     }, []);
 
     const editorProjects = useMemo(() => {
@@ -98,7 +110,6 @@ const ManagerDashboard: React.FC = () => {
               if (payload.eventType === 'INSERT') {
                   setProjects(currentProjects => {
                     const newProject = payload.new as Project;
-                    // Avoid adding duplicates if the project was already added for immediate feedback
                     if (currentProjects.some(p => p.id === newProject.id)) {
                         return currentProjects;
                     }
@@ -159,16 +170,35 @@ const ManagerDashboard: React.FC = () => {
           console.error("Error creating project:", error);
           alert(`Failed to add project: ${error.message}\n\nThis is often caused by Row Level Security (RLS) being enabled on your 'projects' table without a policy that allows inserts. Please check your Supabase dashboard under 'Authentication' > 'Policies' and consider disabling RLS for the projects table if this app is for a trusted group of users.`);
       } else if (newProject) {
-          // Add the project to state immediately for a responsive UI.
-          // The real-time subscription handler will prevent duplicates.
           setProjects(currentProjects => [newProject, ...currentProjects]);
           setCurrentPage('ongoing');
+      } else {
+          console.error("Error creating project: Supabase returned no error, but no new project data was received.");
+          alert("An unexpected error occurred while adding the project. Please refresh the page and try again.");
       }
     }, []);
 
     const handleUpdateProjectField = useCallback(async (id: number, field: keyof Project, value: string | number | boolean | null) => {
+        // Optimistically update the UI for instant feedback
+        setProjects(currentProjects =>
+            currentProjects.map(p =>
+                p.id === id ? { ...p, [field]: value } : p
+            )
+        );
+
         const { error } = await supabase.from('projects').update({ [field]: value }).eq('id', id);
-        if (error) console.error('Error updating project field:', error.message);
+
+        if (error) {
+            console.error('Error updating project field:', error.message);
+            alert(`Failed to update project: ${error.message}. The view will be refreshed to ensure data consistency.`);
+            // On failure, refetch all data to revert the optimistic update and ensure consistency
+            const { data, error: fetchError } = await supabase.from('projects').select('*');
+            if (fetchError) {
+                console.error('Error refetching projects after update failure:', fetchError.message);
+            } else {
+                setProjects(data || []);
+            }
+        }
     }, []);
     
     const handleSortByDate = useCallback(() => {
