@@ -1,4 +1,3 @@
-
 import { Project } from './types';
 
 export const getClientName = (project: Project): string => {
@@ -16,5 +15,6 @@ export const getClientName = (project: Project): string => {
 
 export const calculateWhatsLeft = (est_rt: number, total_edited: number): string => {
     const result = (est_rt || 0) - (total_edited || 0);
-    return result.toFixed(2);
+    // Using Number() strips trailing zeros from the string returned by toFixed() for a cleaner look
+    return String(Number(result.toFixed(2)));
 };
