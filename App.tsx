@@ -127,7 +127,27 @@ const ManagerDashboard: React.FC = () => {
         };
     }, []);
 
-    const ongoingProjects = useMemo(() => projects.filter(p => p.status === 'ongoing'), [projects]);
+    const ongoingProjects = useMemo(() => {
+        return projects
+            .filter(p => p.status === 'ongoing')
+            .sort((a, b) => {
+                const isAUnassigned = !a.editor && !a.master && !a.pz_qc;
+                const isBUnassigned = !b.editor && !b.master && !b.pz_qc;
+
+                // Prioritize unassigned projects to the top
+                if (isAUnassigned && !isBUnassigned) {
+                    return -1; // a comes first
+                }
+                if (!isAUnassigned && isBUnassigned) {
+                    return 1; // b comes first
+                }
+
+                // For projects in the same group (both unassigned or both assigned), sort by due_date
+                if (!a.due_date) return 1; // No due date goes to the bottom
+                if (!b.due_date) return -1;
+                return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+            });
+    }, [projects]);
     const doneProjects = useMemo(() => projects.filter(p => p.status === 'done'), [projects]);
     const archivedProjects = useMemo(() => projects.filter(p => p.status === 'archived'), [projects]);
     
