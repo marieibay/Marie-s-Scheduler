@@ -10,55 +10,12 @@ import {
     PlusIcon
 } from './components';
 
-// --- EDITOR PAGE COMPONENT (replaces editor.tsx) ---
-const EditorPage: React.FC = () => {
-    const [projects, setProjects] = useState<Project[]>([]);
+// --- CHILD COMPONENTS (Now receive state and handlers via props) ---
 
-    useEffect(() => {
-        const fetchProjects = async () => {
-            const { data, error } = await supabase.from('projects').select('*').eq('status', 'ongoing');
-            if (error) console.error('Error fetching editor projects:', error.message);
-            else setProjects(data || []);
-        };
-        fetchProjects();
-
-        // Use a single, stable channel name for reliable updates
-        const channel = supabase.channel('projects')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, payload => {
-              if (payload.eventType === 'INSERT') {
-                  setProjects(currentProjects => {
-                    const newProject = payload.new as Project;
-                     if (currentProjects.some(p => p.id === newProject.id)) {
-                        return currentProjects.map(p => p.id === newProject.id ? newProject : p);
-                    }
-                    return [newProject, ...currentProjects];
-                  });
-              } else if (payload.eventType === 'UPDATE') {
-                  setProjects(currentProjects => currentProjects.map(p => p.id === payload.new.id ? payload.new as Project : p));
-              } else if (payload.eventType === 'DELETE') {
-                  setProjects(currentProjects => currentProjects.filter(p => p.id !== (payload.old as Project).id));
-              }
-          }).subscribe();
-
-        return () => {
-            supabase.removeChannel(channel);
-        };
-    }, []);
-
-    const handleUpdateProjectField = useCallback(async (id: number, field: keyof Project, value: string | number | boolean) => {
-        setProjects(currentProjects =>
-            currentProjects.map(p =>
-                p.id === id ? { ...p, [field]: value } : p
-            )
-        );
-        const { error } = await supabase.from('projects').update({ [field]: value }).eq('id', id);
-        if (error) {
-            console.error('Error updating project field:', error.message);
-             const { data, error: fetchError } = await supabase.from('projects').select('*').eq('status', 'ongoing');
-            if (fetchError) console.error('Error refetching editor projects:', fetchError.message);
-            else setProjects(data || []);
-        }
-    }, []);
+const EditorPage: React.FC<{
+    projects: Project[]; 
+    onUpdate: (id: number, field: keyof Project, value: string | number | boolean) => void;
+}> = ({ projects, onUpdate }) => {
 
     const editorProjects = useMemo(() => {
         return [...projects]
@@ -79,52 +36,28 @@ const EditorPage: React.FC = () => {
             </div>
         </header>
         <main>
-          <EditorView projects={editorProjects} onUpdate={handleUpdateProjectField} />
+          <EditorView projects={editorProjects} onUpdate={onUpdate} />
         </main>
       </div>
     );
 };
 
-// --- MANAGER DASHBOARD COMPONENT (original App component logic) ---
-const ManagerDashboard: React.FC = () => {
-    const [projects, setProjects] = useState<Project[]>([]);
+const ManagerDashboard: React.FC<{
+    projects: Project[];
+    onAddProject: () => void;
+    onUpdateProject: (id: number, field: keyof Project, value: string | number | boolean | null) => void;
+}> = ({ projects, onAddProject, onUpdateProject }) => {
     const [viewMode, setViewMode] = useState<ViewMode>('manager');
     const [currentPage, setCurrentPage] = useState<'ongoing' | 'done' | 'archived' | 'editorView'>('ongoing');
     const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
+    const [currentProjects, setCurrentProjects] = useState<Project[]>(projects);
 
     useEffect(() => {
-        const fetchProjects = async () => {
-            const { data, error } = await supabase.from('projects').select('*');
-            if (error) console.error('Error fetching manager projects:', error.message);
-            else setProjects(data || []);
-        };
-        fetchProjects();
-
-        // Use a single, stable channel name for reliable updates
-        const channel = supabase.channel('projects')
-          .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, payload => {
-              if (payload.eventType === 'INSERT') {
-                  setProjects(currentProjects => {
-                    const newProject = payload.new as Project;
-                    if (currentProjects.some(p => p.id === newProject.id)) {
-                        return currentProjects.map(p => p.id === newProject.id ? newProject : p);
-                    }
-                    return [newProject, ...currentProjects];
-                  });
-              } else if (payload.eventType === 'UPDATE') {
-                  setProjects(currentProjects => currentProjects.map(p => p.id === payload.new.id ? payload.new as Project : p));
-              } else if (payload.eventType === 'DELETE') {
-                  setProjects(currentProjects => currentProjects.filter(p => p.id !== (payload.old as Project).id));
-              }
-          }).subscribe();
-
-        return () => {
-            supabase.removeChannel(channel);
-        };
-    }, []);
-
+        setCurrentProjects(projects);
+    }, [projects]);
+    
     const ongoingProjects = useMemo(() => {
-        return projects
+        return currentProjects
             .filter(p => p.status === 'ongoing')
             .sort((a, b) => {
                 const isAUnassigned = !a.editor && !a.master && !a.pz_qc;
@@ -137,74 +70,12 @@ const ManagerDashboard: React.FC = () => {
                 if (!b.due_date) return -1;
                 return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
             });
-    }, [projects]);
-    const doneProjects = useMemo(() => projects.filter(p => p.status === 'done'), [projects]);
-    const archivedProjects = useMemo(() => projects.filter(p => p.status === 'archived'), [projects]);
-    
-    const handleAddNewProject = useCallback(async () => {
-      const tempId = -Date.now(); // Use negative temp ID
-      const tempProject: Project = {
-        id: tempId,
-        created_at: new Date().toISOString(),
-        title: 'New Project - Click to Edit Title',
-        due_date: new Date().toISOString().split('T')[0],
-        original_due_date: new Date().toISOString().split('T')[0],
-        notes: '',
-        editor: '',
-        editor_note: '',
-        pz_qc: '',
-        pz_qc_note: '',
-        master: '',
-        master_note: '',
-        est_rt: 0,
-        total_edited: 0,
-        remaining_raw: 0,
-        is_on_hold: false,
-        status: 'ongoing' as const,
-      };
-
-      setProjects(currentProjects => [tempProject, ...currentProjects]);
-      setCurrentPage('ongoing');
-
-      const { id, created_at, ...newProjectData } = tempProject;
-
-      const { data: newProject, error } = await supabase
-        .from('projects')
-        .insert(newProjectData)
-        .select()
-        .single();
-
-      if (error) {
-          console.error("Error creating project:", error);
-          alert(`Failed to add project: ${error.message}`);
-          setProjects(currentProjects => currentProjects.filter(p => p.id !== tempId));
-      } else if (newProject) {
-          setProjects(currentProjects => 
-            currentProjects.map(p => p.id === tempId ? newProject : p)
-          );
-      }
-    }, []);
-
-    const handleUpdateProjectField = useCallback(async (id: number, field: keyof Project, value: string | number | boolean | null) => {
-        setProjects(currentProjects =>
-            currentProjects.map(p =>
-                p.id === id ? { ...p, [field]: value } : p
-            )
-        );
-
-        const { error } = await supabase.from('projects').update({ [field]: value }).eq('id', id);
-
-        if (error) {
-            console.error('Error updating project field:', error.message);
-            alert(`Failed to update project: ${error.message}.`);
-            const { data, error: fetchError } = await supabase.from('projects').select('*');
-            if (fetchError) console.error('Error refetching projects:', fetchError.message);
-            else setProjects(data || []);
-        }
-    }, []);
+    }, [currentProjects]);
+    const doneProjects = useMemo(() => currentProjects.filter(p => p.status === 'done'), [currentProjects]);
+    const archivedProjects = useMemo(() => currentProjects.filter(p => p.status === 'archived'), [currentProjects]);
     
     const handleSortByDate = useCallback(() => {
-        setProjects(prevProjects => {
+        setCurrentProjects(prevProjects => {
             const currentTab = currentPage === 'editorView' ? 'ongoing' : currentPage;
             const projectsForPage = prevProjects.filter(p => p.status === currentTab);
             const otherProjects = prevProjects.filter(p => p.status !== currentTab);
@@ -223,22 +94,14 @@ const ManagerDashboard: React.FC = () => {
     const handleCloseDeleteModal = useCallback(() => setProjectToDelete(null), []);
     const handleConfirmDelete = useCallback(async () => {
         if (projectToDelete) {
-            setProjects(currentProjects => currentProjects.filter(p => p.id !== projectToDelete.id));
-            const { error } = await supabase.from('projects').delete().eq('id', projectToDelete.id);
-            if(error) {
-                console.error("Error deleting project:", error.message);
-                alert(`Failed to delete project: ${error.message}.`);
-                const { data, error: fetchError } = await supabase.from('projects').select('*');
-                if (fetchError) console.error('Error refetching projects:', fetchError.message);
-                else setProjects(data || []);
-            }
+            onUpdateProject(projectToDelete.id, 'status', 'deleted'); // This will trigger a DELETE via the main handler
             setProjectToDelete(null);
         }
-    }, [projectToDelete]);
+    }, [projectToDelete, onUpdateProject]);
 
     const renderCurrentView = () => {
         if (currentPage === 'editorView') {
-            return <EditorView projects={ongoingProjects} onUpdate={handleUpdateProjectField} />;
+            return <EditorView projects={ongoingProjects} onUpdate={onUpdateProject} />;
         }
 
         let projectsForPage: Project[];
@@ -250,8 +113,8 @@ const ManagerDashboard: React.FC = () => {
         }
         
         return viewMode === 'manager'
-            ? <ManagerView projects={projectsForPage} onUpdate={handleUpdateProjectField} onDelete={handleOpenDeleteModal} />
-            : <ClientView projects={projectsForPage} onUpdate={handleUpdateProjectField} />;
+            ? <ManagerView projects={projectsForPage} onUpdate={onUpdateProject} onDelete={handleOpenDeleteModal} />
+            : <ClientView projects={projectsForPage} onUpdate={onUpdateProject} />;
     };
 
     return (
@@ -265,7 +128,7 @@ const ManagerDashboard: React.FC = () => {
                         </div>
                         <div className="flex items-center space-x-4">
                             {viewMode === 'manager' && (
-                                <button onClick={handleAddNewProject} className="px-4 py-2 bg-indigo-600 text-white rounded-lg shadow hover:bg-indigo-700 transition-transform duration-150 ease-in-out active:scale-95 active:bg-indigo-800 flex items-center">
+                                <button onClick={() => { onAddProject(); setCurrentPage('ongoing'); }} className="px-4 py-2 bg-indigo-600 text-white rounded-lg shadow hover:bg-indigo-700 transition-transform duration-150 ease-in-out active:scale-95 active:bg-indigo-800 flex items-center">
                                     <PlusIcon />
                                     <span className="hidden sm:inline">Add Project</span>
                                 </button>
@@ -316,30 +179,115 @@ const ManagerDashboard: React.FC = () => {
     );
 };
 
-// --- MAIN ROUTER COMPONENT ---
+// --- MAIN APP CONTAINER (Manages state, data fetching, and routing) ---
 const App: React.FC = () => {
+    const [projects, setProjects] = useState<Project[]>([]);
     const [route, setRoute] = useState(window.location.pathname);
 
+    // --- CENTRALIZED DATA FETCHING & REAL-TIME SUBSCRIPTION ---
     useEffect(() => {
-        const onLocationChange = () => {
-            setRoute(window.location.pathname);
+        const fetchProjects = async () => {
+            const { data, error } = await supabase.from('projects').select('*');
+            if (error) console.error('Error fetching initial projects:', error.message);
+            else setProjects(data || []);
         };
+        fetchProjects();
+
+        // The single, authoritative subscription for the entire application
+        const channel = supabase.channel('projects')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, payload => {
+              if (payload.eventType === 'INSERT') {
+                  setProjects(currentProjects => {
+                    const newProject = payload.new as Project;
+                    // Avoid duplicates from optimistic updates
+                    if (currentProjects.some(p => p.id === newProject.id)) {
+                        return currentProjects.map(p => p.id === newProject.id ? newProject : p);
+                    }
+                    return [newProject, ...currentProjects];
+                  });
+              } else if (payload.eventType === 'UPDATE') {
+                  setProjects(currentProjects => currentProjects.map(p => p.id === payload.new.id ? payload.new as Project : p));
+              } else if (payload.eventType === 'DELETE') {
+                  setProjects(currentProjects => currentProjects.filter(p => p.id !== (payload.old as {id: number}).id));
+              }
+          }).subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, []);
+
+    // --- CENTRALIZED HANDLER FUNCTIONS ---
+
+    const handleAddNewProject = useCallback(async () => {
+        const tempId = -Date.now();
+        const tempProject: Project = {
+            id: tempId, created_at: new Date().toISOString(), title: 'New Project - Click to Edit Title',
+            due_date: new Date().toISOString().split('T')[0], original_due_date: new Date().toISOString().split('T')[0],
+            notes: '', editor: '', editor_note: '', pz_qc: '', pz_qc_note: '', master: '', master_note: '',
+            est_rt: 0, total_edited: 0, remaining_raw: 0, is_on_hold: false, status: 'ongoing' as const,
+        };
+        setProjects(currentProjects => [tempProject, ...currentProjects]);
+
+        const { id, created_at, ...newProjectData } = tempProject;
+
+        const { data: newProject, error } = await supabase.from('projects').insert(newProjectData).select().single();
+        if (error) {
+            console.error("Error creating project:", error);
+            alert(`Failed to add project: ${error.message}`);
+            setProjects(currentProjects => currentProjects.filter(p => p.id !== tempId));
+        } else if (newProject) {
+            setProjects(currentProjects => currentProjects.map(p => p.id === tempId ? newProject : p));
+        }
+    }, []);
+
+    const handleUpdateProjectField = useCallback(async (id: number, field: keyof Project, value: any) => {
+        // Handle Delete requests
+        if (field === 'status' && value === 'deleted') {
+            setProjects(currentProjects => currentProjects.filter(p => p.id !== id));
+            const { error } = await supabase.from('projects').delete().eq('id', id);
+            if(error) {
+                alert(`Failed to delete project: ${error.message}.`);
+                const { data } = await supabase.from('projects').select('*');
+                setProjects(data || []);
+            }
+            return;
+        }
+
+        // Optimistic UI Update
+        setProjects(currentProjects =>
+            currentProjects.map(p => p.id === id ? { ...p, [field]: value } : p)
+        );
+        
+        // Update database
+        const { error } = await supabase.from('projects').update({ [field]: value }).eq('id', id);
+        if (error) {
+            console.error('Error updating project field:', error.message);
+            alert(`Failed to update project: ${error.message}.`);
+            // Revert on error
+            const { data } = await supabase.from('projects').select('*');
+            setProjects(data || []);
+        }
+    }, []);
+
+    // --- ROUTING ---
+    useEffect(() => {
+        const onLocationChange = () => setRoute(window.location.pathname);
         window.addEventListener('popstate', onLocationChange);
-        // Also handle direct navigation and refreshes
         window.history.pushState = new Proxy(window.history.pushState, {
             apply: (target, thisArg, argArray) => {
-                target.apply(thisArg, argArray);
+                const result = target.apply(thisArg, argArray);
                 onLocationChange();
-                return target;
+                return result;
             },
         });
         return () => window.removeEventListener('popstate', onLocationChange);
     }, []);
 
     if (route === '/editor' || route === '/editor.html') {
-        return <EditorPage />;
+        return <EditorPage projects={projects} onUpdate={handleUpdateProjectField} />;
     }
-    return <ManagerDashboard />;
+    return <ManagerDashboard projects={projects} onAddProject={handleAddNewProject} onUpdateProject={handleUpdateProjectField} />;
 };
 
 export default App;
