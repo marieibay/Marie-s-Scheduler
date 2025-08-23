@@ -17,7 +17,7 @@ const EditorPage: React.FC = () => {
     useEffect(() => {
         const fetchProjects = async () => {
             const { data, error } = await supabase.from('projects').select('*');
-            if (error) console.error('Error fetching projects:', error);
+            if (error) console.error('Error fetching editor projects:', error.message);
             else setProjects(data || []);
         };
         fetchProjects();
@@ -40,7 +40,7 @@ const EditorPage: React.FC = () => {
 
     const handleUpdateProjectField = useCallback(async (id: number, field: keyof Project, value: string | number | boolean) => {
         const { error } = await supabase.from('projects').update({ [field]: value }).eq('id', id);
-        if (error) console.error('Error updating project:', error);
+        if (error) console.error('Error updating project field:', error.message);
     }, []);
 
     const editorProjects = useMemo(() => {
@@ -81,7 +81,7 @@ const ManagerDashboard: React.FC = () => {
     useEffect(() => {
         const fetchProjects = async () => {
             const { data, error } = await supabase.from('projects').select('*');
-            if (error) console.error('Error fetching projects:', error);
+            if (error) console.error('Error fetching manager projects:', error.message);
             else setProjects(data || []);
         };
         fetchProjects();
@@ -135,13 +135,13 @@ const ManagerDashboard: React.FC = () => {
         status: 'ongoing' as const,
       };
       const { error } = await supabase.from('projects').insert([newProjectData]);
-      if (error) console.error("Error creating project:", error);
+      if (error) console.error("Error creating project:", error.message);
       else setCurrentPage('ongoing');
     }, []);
 
     const handleUpdateProjectField = useCallback(async (id: number, field: keyof Project, value: string | number | boolean | null) => {
         const { error } = await supabase.from('projects').update({ [field]: value }).eq('id', id);
-        if (error) console.error('Error updating project:', error);
+        if (error) console.error('Error updating project field:', error.message);
     }, []);
     
     const handleSortByDate = useCallback(() => {
@@ -170,7 +170,7 @@ const ManagerDashboard: React.FC = () => {
     const handleConfirmDelete = useCallback(async () => {
         if (projectToDelete) {
             const { error } = await supabase.from('projects').delete().eq('id', projectToDelete.id);
-            if(error) console.error("Error deleting project:", error);
+            if(error) console.error("Error deleting project:", error.message);
             setProjectToDelete(null);
         }
     }, [projectToDelete]);
