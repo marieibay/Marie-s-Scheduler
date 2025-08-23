@@ -50,45 +50,44 @@ const ManagerDashboard: React.FC<{
     const [viewMode, setViewMode] = useState<ViewMode>('manager');
     const [currentPage, setCurrentPage] = useState<'ongoing' | 'done' | 'archived' | 'editorView'>('ongoing');
     const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
-    const [currentProjects, setCurrentProjects] = useState<Project[]>(projects);
+    const [sortByDate, setSortByDate] = useState(false);
 
+    // Reset sort when changing tabs for a consistent experience
     useEffect(() => {
-        setCurrentProjects(projects);
-    }, [projects]);
+        setSortByDate(false);
+    }, [currentPage]);
     
     const ongoingProjects = useMemo(() => {
-        return currentProjects
-            .filter(p => p.status === 'ongoing')
-            .sort((a, b) => {
-                const isAUnassigned = !a.editor && !a.master && !a.pz_qc;
-                const isBUnassigned = !b.editor && !b.master && !b.pz_qc;
-
-                if (isAUnassigned && !isBUnassigned) return -1;
-                if (!isAUnassigned && isBUnassigned) return 1;
-
+        const filtered = projects.filter(p => p.status === 'ongoing');
+        
+        if (sortByDate && currentPage === 'ongoing') {
+            return filtered.sort((a, b) => {
                 if (!a.due_date) return 1;
                 if (!b.due_date) return -1;
                 return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
             });
-    }, [currentProjects]);
-    const doneProjects = useMemo(() => currentProjects.filter(p => p.status === 'done'), [currentProjects]);
-    const archivedProjects = useMemo(() => currentProjects.filter(p => p.status === 'archived'), [currentProjects]);
+        }
+        
+        // Default sort: unassigned first, then by due date
+        return filtered.sort((a, b) => {
+            const isAUnassigned = !a.editor && !a.master && !a.pz_qc;
+            const isBUnassigned = !b.editor && !b.master && !b.pz_qc;
+
+            if (isAUnassigned && !isBUnassigned) return -1;
+            if (!isAUnassigned && isBUnassigned) return 1;
+
+            if (!a.due_date) return 1;
+            if (!b.due_date) return -1;
+            return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+        });
+    }, [projects, currentPage, sortByDate]);
+
+    const doneProjects = useMemo(() => projects.filter(p => p.status === 'done'), [projects]);
+    const archivedProjects = useMemo(() => projects.filter(p => p.status === 'archived'), [projects]);
     
     const handleSortByDate = useCallback(() => {
-        setCurrentProjects(prevProjects => {
-            const currentTab = currentPage === 'editorView' ? 'ongoing' : currentPage;
-            const projectsForPage = prevProjects.filter(p => p.status === currentTab);
-            const otherProjects = prevProjects.filter(p => p.status !== currentTab);
-
-            const sorted = [...projectsForPage].sort((a, b) => {
-                if (!a.due_date) return 1;
-                if (!b.due_date) return -1;
-                return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
-            });
-
-            return [...sorted, ...otherProjects];
-        });
-    }, [currentPage]);
+        setSortByDate(prev => !prev);
+    }, []);
 
     const handleOpenDeleteModal = useCallback((project: Project) => setProjectToDelete(project), []);
     const handleCloseDeleteModal = useCallback(() => setProjectToDelete(null), []);
@@ -145,9 +144,9 @@ const ManagerDashboard: React.FC<{
                                     <button onClick={() => setCurrentPage('archived')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${currentPage === 'archived' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>Archived Projects</button>
                                     <button onClick={() => setCurrentPage('editorView')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${currentPage === 'editorView' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>Editor View</button>
                                 </div>
-                                {viewMode === 'manager' && (
+                                {viewMode === 'manager' && currentPage === 'ongoing' && (
                                     <button onClick={handleSortByDate} className="px-4 py-2 rounded-lg text-sm font-semibold transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300 shadow-sm">
-                                        Sort by Date
+                                        {sortByDate ? 'Default Sort' : 'Sort by Date'}
                                     </button>
                                  )}
                             </div>
