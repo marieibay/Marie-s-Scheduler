@@ -22,8 +22,8 @@ const EditorPage: React.FC = () => {
         };
         fetchProjects();
 
-        // Use a unique channel name to prevent conflicts
-        const channel = supabase.channel(`editor-projects-channel:${Math.random()}`)
+        // Use a single, stable channel name for reliable updates
+        const channel = supabase.channel('projects')
           .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, payload => {
               if (payload.eventType === 'INSERT') {
                   setProjects(currentProjects => {
@@ -100,8 +100,8 @@ const ManagerDashboard: React.FC = () => {
         };
         fetchProjects();
 
-        // Use a unique channel name to prevent conflicts
-        const channel = supabase.channel(`manager-projects-channel:${Math.random()}`)
+        // Use a single, stable channel name for reliable updates
+        const channel = supabase.channel('projects')
           .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, payload => {
               if (payload.eventType === 'INSERT') {
                   setProjects(currentProjects => {
