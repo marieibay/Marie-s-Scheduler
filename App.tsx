@@ -1,8 +1,7 @@
 
 import React, { useState, useCallback, useMemo, useEffect } from 'react';
 import { Project, ViewMode } from './types';
-import { initialProjects } from './data';
-import { useLocalStorage } from './utils';
+import { supabase } from './supabaseClient';
 import { 
     ManagerView, 
     ClientView, 
@@ -13,19 +12,44 @@ import {
 
 // --- EDITOR PAGE COMPONENT (replaces editor.tsx) ---
 const EditorPage: React.FC = () => {
-    const [projects, setProjects] = useLocalStorage<Project[]>('projects', initialProjects);
+    const [projects, setProjects] = useState<Project[]>([]);
 
-    const handleUpdateProjectField = useCallback((id: number, field: keyof Project, value: string | number | boolean) => {
-        setProjects(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p));
-    }, [setProjects]);
+    useEffect(() => {
+        const fetchProjects = async () => {
+            const { data, error } = await supabase.from('projects').select('*');
+            if (error) console.error('Error fetching projects:', error);
+            else setProjects(data || []);
+        };
+        fetchProjects();
+
+        const channel = supabase.channel('editor-projects')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, payload => {
+              if (payload.eventType === 'INSERT') {
+                  setProjects(currentProjects => [payload.new as Project, ...currentProjects]);
+              } else if (payload.eventType === 'UPDATE') {
+                  setProjects(currentProjects => currentProjects.map(p => p.id === payload.new.id ? payload.new as Project : p));
+              } else if (payload.eventType === 'DELETE') {
+                  setProjects(currentProjects => currentProjects.filter(p => p.id !== payload.old.id));
+              }
+          }).subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, []);
+
+    const handleUpdateProjectField = useCallback(async (id: number, field: keyof Project, value: string | number | boolean) => {
+        const { error } = await supabase.from('projects').update({ [field]: value }).eq('id', id);
+        if (error) console.error('Error updating project:', error);
+    }, []);
 
     const editorProjects = useMemo(() => {
         return [...projects]
           .filter(p => p.status === 'ongoing')
           .sort((a, b) => {
-            if (!a.dueDate) return 1;
-            if (!b.dueDate) return -1;
-            return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+            if (!a.due_date) return 1;
+            if (!b.due_date) return -1;
+            return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
           });
     }, [projects]);
     
@@ -49,10 +73,34 @@ const EditorPage: React.FC = () => {
 
 // --- MANAGER DASHBOARD COMPONENT (original App component logic) ---
 const ManagerDashboard: React.FC = () => {
-    const [projects, setProjects] = useLocalStorage<Project[]>('projects', initialProjects);
+    const [projects, setProjects] = useState<Project[]>([]);
     const [viewMode, setViewMode] = useState<ViewMode>('manager');
     const [currentPage, setCurrentPage] = useState<'ongoing' | 'done' | 'archived'>('ongoing');
     const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
+
+    useEffect(() => {
+        const fetchProjects = async () => {
+            const { data, error } = await supabase.from('projects').select('*');
+            if (error) console.error('Error fetching projects:', error);
+            else setProjects(data || []);
+        };
+        fetchProjects();
+
+        const channel = supabase.channel('manager-projects')
+          .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, payload => {
+              if (payload.eventType === 'INSERT') {
+                  setProjects(currentProjects => [payload.new as Project, ...currentProjects]);
+              } else if (payload.eventType === 'UPDATE') {
+                  setProjects(currentProjects => currentProjects.map(p => p.id === payload.new.id ? payload.new as Project : p));
+              } else if (payload.eventType === 'DELETE') {
+                  setProjects(currentProjects => currentProjects.filter(p => p.id !== payload.old.id));
+              }
+          }).subscribe();
+
+        return () => {
+            supabase.removeChannel(channel);
+        };
+    }, []);
 
     const ongoingProjects = useMemo(() => projects.filter(p => p.status === 'ongoing'), [projects]);
     const doneProjects = useMemo(() => projects.filter(p => p.status === 'done'), [projects]);
@@ -68,32 +116,33 @@ const ManagerDashboard: React.FC = () => {
         }
     };
 
-    const handleAddNewProject = useCallback(() => {
-      const newProject: Project = {
-        id: Date.now(),
+    const handleAddNewProject = useCallback(async () => {
+      const newProjectData = {
         title: 'New Project - Click to Edit Title',
-        dueDate: '',
-        originalDueDate: '',
+        due_date: new Date().toISOString().split('T')[0],
+        original_due_date: new Date().toISOString().split('T')[0],
         notes: '',
         editor: '',
-        editorNote: '',
-        pzQc: '',
-        pzQcNote: '',
+        editor_note: '',
+        pz_qc: '',
+        pz_qc_note: '',
         master: '',
-        masterNote: '',
-        estRt: 0,
-        totalEdited: 0,
-        remainingRaw: 0,
-        isOnHold: false,
-        status: 'ongoing',
+        master_note: '',
+        est_rt: 0,
+        total_edited: 0,
+        remaining_raw: 0,
+        is_on_hold: false,
+        status: 'ongoing' as const,
       };
-      setProjects(prev => [newProject, ...prev]);
-      setCurrentPage('ongoing');
-    }, [setProjects]);
+      const { error } = await supabase.from('projects').insert([newProjectData]);
+      if (error) console.error("Error creating project:", error);
+      else setCurrentPage('ongoing');
+    }, []);
 
-    const handleUpdateProjectField = useCallback((id: number, field: keyof Project, value: string | number | boolean) => {
-        setProjects(prev => prev.map(p => p.id === id ? { ...p, [field]: value } : p));
-    }, [setProjects]);
+    const handleUpdateProjectField = useCallback(async (id: number, field: keyof Project, value: string | number | boolean | null) => {
+        const { error } = await supabase.from('projects').update({ [field]: value }).eq('id', id);
+        if (error) console.error('Error updating project:', error);
+    }, []);
     
     const handleSortByDate = useCallback(() => {
         setProjects(prevProjects => {
@@ -101,14 +150,14 @@ const ManagerDashboard: React.FC = () => {
             const otherProjects = prevProjects.filter(p => p.status !== currentPage);
 
             const sortedCurrent = [...currentProjects].sort((a, b) => {
-                if (!a.dueDate) return 1;
-                if (!b.dueDate) return -1;
-                return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+                if (!a.due_date) return 1;
+                if (!b.due_date) return -1;
+                return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
             });
 
             return [...sortedCurrent, ...otherProjects];
         });
-    }, [currentPage, setProjects]);
+    }, [currentPage]);
 
     const handleOpenDeleteModal = useCallback((project: Project) => {
         setProjectToDelete(project);
@@ -118,12 +167,13 @@ const ManagerDashboard: React.FC = () => {
         setProjectToDelete(null);
     }, []);
 
-    const handleConfirmDelete = useCallback(() => {
+    const handleConfirmDelete = useCallback(async () => {
         if (projectToDelete) {
-            setProjects(prev => prev.filter(p => p.id !== projectToDelete.id));
+            const { error } = await supabase.from('projects').delete().eq('id', projectToDelete.id);
+            if(error) console.error("Error deleting project:", error);
             setProjectToDelete(null);
         }
-    }, [projectToDelete, setProjects]);
+    }, [projectToDelete]);
 
     const renderCurrentView = () => {
         let projectsForPage: Project[];

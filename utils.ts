@@ -1,5 +1,4 @@
 
-import { useState, useEffect } from 'react';
 import { Project } from './types';
 
 export const getClientName = (project: Project): string => {
@@ -15,48 +14,7 @@ export const getClientName = (project: Project): string => {
     return 'PRH';
 };
 
-export const calculateWhatsLeft = (estRt: number, totalEdited: number): string => {
-    const result = (estRt || 0) - (totalEdited || 0);
+export const calculateWhatsLeft = (est_rt: number, total_edited: number): string => {
+    const result = (est_rt || 0) - (total_edited || 0);
     return result.toFixed(2);
 };
-
-// Custom Hook to sync state with localStorage and other tabs/windows
-export function useLocalStorage<T>(key: string, initialValue: T): [T, (value: T | ((val: T) => T)) => void] {
-    const [storedValue, setStoredValue] = useState<T>(() => {
-        try {
-            const item = window.localStorage.getItem(key);
-            return item ? JSON.parse(item) : initialValue;
-        } catch (error) {
-            console.error(error);
-            return initialValue;
-        }
-    });
-
-    const setValue = (value: T | ((val: T) => T)) => {
-        try {
-            const valueToStore = value instanceof Function ? value(storedValue) : value;
-            setStoredValue(valueToStore);
-            window.localStorage.setItem(key, JSON.stringify(valueToStore));
-        } catch (error) {
-            console.error(error);
-        }
-    };
-    
-    useEffect(() => {
-        const handleStorageChange = (e: StorageEvent) => {
-            if (e.key === key && e.newValue) {
-                try {
-                    setStoredValue(JSON.parse(e.newValue));
-                } catch (error) {
-                    console.error(error);
-                }
-            }
-        };
-        window.addEventListener('storage', handleStorageChange);
-        return () => {
-            window.removeEventListener('storage', handleStorageChange);
-        };
-    }, [key]);
-
-    return [storedValue, setValue];
-}

@@ -83,12 +83,12 @@ export const DeleteConfirmationModal: React.FC<DeleteConfirmationModalProps> = (
 
 // Due Date Display with Alerts
 interface DueDateDisplayProps {
-    dueDate: string;
-    originalDueDate: string;
+    due_date: string | null;
+    original_due_date: string | null;
     onUpdate: (newDate: string) => void;
 }
 
-export const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ dueDate, originalDueDate, onUpdate }) => {
+export const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ due_date, original_due_date, onUpdate }) => {
     const [isEditing, setIsEditing] = useState(false);
     const dateInputRef = useRef<HTMLInputElement>(null);
 
@@ -118,10 +118,10 @@ export const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ dueDate, origina
     };
 
     const alertIcon = useMemo(() => {
-        if (!dueDate) return null;
+        if (!due_date) return null;
         const today = new Date();
         today.setHours(0, 0, 0, 0);
-        const dueDateObj = new Date(dueDate + 'T00:00:00');
+        const dueDateObj = new Date(due_date + 'T00:00:00');
         if (isNaN(dueDateObj.getTime())) return null;
         dueDateObj.setHours(0, 0, 0, 0);
         const timeDiff = dueDateObj.getTime() - today.getTime();
@@ -129,12 +129,12 @@ export const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ dueDate, origina
         if (dayDiff < 0) return <WarningIconRed />;
         if (dayDiff <= 7) return <WarningIconYellow />;
         return null;
-    }, [dueDate]);
+    }, [due_date]);
     
     const formattedDate = useMemo(() => {
-        if (!dueDate) return 'MM/DD/YY';
+        if (!due_date) return 'MM/DD/YY';
         try {
-            const date = new Date(dueDate + 'T00:00:00');
+            const date = new Date(due_date + 'T00:00:00');
             const month = String(date.getMonth() + 1).padStart(2, '0');
             const day = String(date.getDate()).padStart(2, '0');
             const year = String(date.getFullYear()).slice(-2);
@@ -142,9 +142,9 @@ export const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ dueDate, origina
         } catch (e) {
             return 'Invalid Date';
         }
-    }, [dueDate]);
+    }, [due_date]);
     
-    const isUpdated = originalDueDate && dueDate !== originalDueDate;
+    const isUpdated = original_due_date && due_date !== original_due_date;
 
     if (isEditing) {
         return (
@@ -153,7 +153,7 @@ export const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ dueDate, origina
                  <input
                     ref={dateInputRef}
                     type="date"
-                    value={dueDate}
+                    value={due_date || ''}
                     onChange={handleInputChange}
                     onBlur={handleInputBlur}
                     onKeyDown={handleInputKeyDown}
@@ -174,7 +174,7 @@ export const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ dueDate, origina
           style={{ height: '28px' }}
         >
             <span className="text-sm text-gray-600">Due:</span>
-            <span className={`font-bold text-lg w-[85px] group-hover:text-red-700 transition-colors ${!dueDate ? 'text-gray-400' : 'text-red-600'}`}>{formattedDate}</span>
+            <span className={`font-bold text-lg w-[85px] group-hover:text-red-700 transition-colors ${!due_date ? 'text-gray-400' : 'text-red-600'}`}>{formattedDate}</span>
             <CalendarIcon />
             <div className="w-5 h-5 flex items-center justify-center">{alertIcon}</div>
             {isUpdated && (
@@ -288,20 +288,16 @@ export const SelectInput: React.FC<SelectInputProps> = ({ value, onChange, optio
 // Project Card for Manager and Client Views
 interface ProjectCardProps {
     project: Project;
-    onUpdate: (id: number, field: keyof Project, value: string | number | boolean) => void;
+    onUpdate: (id: number, field: keyof Project, value: string | number | boolean | null) => void;
     onDelete?: (project: Project) => void;
 }
 
 
 export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onDelete }) => {
-    const whatsLeft = calculateWhatsLeft(project.estRt, project.totalEdited);
+    const whatsLeft = calculateWhatsLeft(project.est_rt, project.total_edited);
     
     const handleUpdate = (field: keyof Project, value: string | number | boolean) => {
         onUpdate(project.id, field, value);
-    };
-
-    const handleNumberUpdate = (field: keyof Project, value: string) => {
-        onUpdate(project.id, field, parseFloat(value) || 0);
     };
 
     const renderStatusButtons = () => {
@@ -331,7 +327,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onD
 
     return (
         <div
-            className={`p-4 rounded-lg shadow-md flex flex-col lg:flex-row items-start gap-6 hover:shadow-lg transition-all duration-300 ${project.isOnHold ? 'bg-pink-100 border border-pink-300' : 'bg-white'}`}
+            className={`p-4 rounded-lg shadow-md flex flex-col lg:flex-row items-start gap-6 hover:shadow-lg transition-all duration-300 ${project.is_on_hold ? 'bg-pink-100 border border-pink-300' : 'bg-white'}`}
             data-id={project.id}
         >
             {/* Left Column */}
@@ -344,9 +340,9 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onD
                     placeholder="Project Title"
                  />
                 <DueDateDisplay
-                    dueDate={project.dueDate}
-                    originalDueDate={project.originalDueDate}
-                    onUpdate={(newDate) => handleUpdate('dueDate', newDate)}
+                    due_date={project.due_date}
+                    original_due_date={project.original_due_date}
+                    onUpdate={(newDate) => handleUpdate('due_date', newDate)}
                 />
                 <textarea
                     value={project.notes}
@@ -360,14 +356,14 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onD
             <div className="w-full lg:w-7/12 flex-grow">
                 <div className="flex justify-end items-center gap-2 mb-4">
                     <button
-                        onClick={() => handleUpdate('isOnHold', !project.isOnHold)}
+                        onClick={() => handleUpdate('is_on_hold', !project.is_on_hold)}
                         className={`px-3 py-1 text-xs font-semibold rounded-md shadow-sm transition-colors whitespace-nowrap ${
-                            project.isOnHold
+                            project.is_on_hold
                             ? 'bg-yellow-500 text-white hover:bg-yellow-600'
                             : 'bg-gray-200 text-gray-700 hover:bg-gray-300'
                         }`}
                     >
-                        {project.isOnHold ? 'On Hold' : 'Set Hold'}
+                        {project.is_on_hold ? 'On Hold' : 'Set Hold'}
                     </button>
                     {renderStatusButtons()}
                     {onDelete && (
@@ -393,7 +389,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onD
                                     <SelectInput value={project.editor} onChange={(val) => handleUpdate('editor', val)} options={editors} placeholder="Name..." className={`${INLINE_INPUT_CLASS} font-semibold text-lg`} />
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                    <input type="text" value={project.editorNote} onChange={(e) => handleUpdate('editorNote', e.target.value)} className={INLINE_INPUT_CLASS} placeholder="Note..."/>
+                                    <input type="text" value={project.editor_note} onChange={(e) => handleUpdate('editor_note', e.target.value)} className={INLINE_INPUT_CLASS} placeholder="Note..."/>
                                 </div>
                             </div>
                         </div>
@@ -405,7 +401,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onD
                                     <SelectInput value={project.master} onChange={(val) => handleUpdate('master', val)} options={masters} placeholder="Name..." className={`${INLINE_INPUT_CLASS} font-semibold text-lg`} />
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                    <input type="text" value={project.masterNote} onChange={(e) => handleUpdate('masterNote', e.target.value)} className={INLINE_INPUT_CLASS} placeholder="Note..."/>
+                                    <input type="text" value={project.master_note} onChange={(e) => handleUpdate('master_note', e.target.value)} className={INLINE_INPUT_CLASS} placeholder="Note..."/>
                                 </div>
                             </div>
                         </div>
@@ -414,10 +410,10 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onD
                             <strong className="text-gray-600 w-16 shrink-0 text-right">PZ QC:</strong>
                             <div className="flex-grow flex items-center gap-2">
                                 <div className="flex-1 min-w-0">
-                                    <SelectInput value={project.pzQc} onChange={(val) => handleUpdate('pzQc', val)} options={qcPersonnel} placeholder="Name..." className={`${INLINE_INPUT_CLASS} font-semibold text-lg`} />
+                                    <SelectInput value={project.pz_qc} onChange={(val) => handleUpdate('pz_qc', val)} options={qcPersonnel} placeholder="Name..." className={`${INLINE_INPUT_CLASS} font-semibold text-lg`} />
                                 </div>
                                 <div className="flex-1 min-w-0">
-                                    <input type="text" value={project.pzQcNote} onChange={(e) => handleUpdate('pzQcNote', e.target.value)} className={INLINE_INPUT_CLASS} placeholder="Note..."/>
+                                    <input type="text" value={project.pz_qc_note} onChange={(e) => handleUpdate('pz_qc_note', e.target.value)} className={INLINE_INPUT_CLASS} placeholder="Note..."/>
                                 </div>
                             </div>
                         </div>
@@ -426,11 +422,11 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onD
                     {/* Stats */}
                     <div className="flex flex-row flex-wrap justify-start gap-2 pt-4 md:pt-0 flex-shrink-0">
                         <div className="bg-blue-50 p-2 rounded-lg w-24 text-center">
-                            <input type="number" step="0.01" value={project.estRt} onChange={(e) => handleUpdate('estRt', parseFloat(e.target.value) || 0)} className={`font-bold text-lg text-blue-800 text-center ${INLINE_INPUT_CLASS}`}/>
+                            <input type="number" step="0.01" value={project.est_rt} onChange={(e) => handleUpdate('est_rt', parseFloat(e.target.value) || 0)} className={`font-bold text-lg text-blue-800 text-center ${INLINE_INPUT_CLASS}`}/>
                             <p className="text-xs text-blue-600 mt-1">EST RT</p>
                         </div>
                         <div className="bg-yellow-50 p-2 rounded-lg w-24 text-center">
-                            <input type="number" step="0.01" value={project.totalEdited} onChange={(e) => handleUpdate('totalEdited', parseFloat(e.target.value) || 0)} className={`font-bold text-lg text-yellow-800 text-center ${INLINE_INPUT_CLASS}`}/>
+                            <input type="number" step="0.01" value={project.total_edited} onChange={(e) => handleUpdate('total_edited', parseFloat(e.target.value) || 0)} className={`font-bold text-lg text-yellow-800 text-center ${INLINE_INPUT_CLASS}`}/>
                             <p className="text-xs text-yellow-600 mt-1">Edited</p>
                         </div>
                         <div className="bg-green-50 p-2 rounded-lg w-24 text-center">
@@ -438,7 +434,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onD
                             <p className="text-xs text-green-600 mt-1">What's Left</p>
                         </div>
                         <div className="bg-purple-50 p-2 rounded-lg w-24 text-center">
-                            <input type="number" step="0.01" value={project.remainingRaw} onChange={(e) => handleUpdate('remainingRaw', parseFloat(e.target.value) || 0)} className={`font-bold text-lg text-purple-800 text-center ${INLINE_INPUT_CLASS}`}/>
+                            <input type="number" step="0.01" value={project.remaining_raw} onChange={(e) => handleUpdate('remaining_raw', parseFloat(e.target.value) || 0)} className={`font-bold text-lg text-purple-800 text-center ${INLINE_INPUT_CLASS}`}/>
                             <p className="text-xs text-purple-600 mt-1">Remaining RAW</p>
                         </div>
                     </div>
@@ -452,7 +448,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onD
 // Manager View Component
 interface ManagerViewProps {
     projects: Project[];
-    onUpdate: (id: number, field: keyof Project, value: string | number | boolean) => void;
+    onUpdate: (id: number, field: keyof Project, value: string | number | boolean | null) => void;
     onDelete: (project: Project) => void;
 }
 
@@ -481,7 +477,7 @@ export const ManagerView: React.FC<ManagerViewProps> = ({ projects, onUpdate, on
 // Client View Component
 interface ClientViewProps {
     projects: Project[];
-    onUpdate: (id: number, field: keyof Project, value: string | number | boolean) => void;
+    onUpdate: (id: number, field: keyof Project, value: string | number | boolean | null) => void;
 }
 
 export const ClientView: React.FC<ClientViewProps> = ({ projects, onUpdate }) => {
@@ -498,9 +494,9 @@ export const ClientView: React.FC<ClientViewProps> = ({ projects, onUpdate }) =>
         // Sort projects within each group by due date
         for (const clientName in groups) {
             groups[clientName].sort((a, b) => {
-                if (!a.dueDate) return 1; // Projects without a due date go to the end
-                if (!b.dueDate) return -1;
-                return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+                if (!a.due_date) return 1; // Projects without a due date go to the end
+                if (!b.due_date) return -1;
+                return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
             });
         }
 
@@ -550,7 +546,7 @@ interface EditorRowProps {
 }
 
 export const EditorRow: React.FC<EditorRowProps> = ({ project, onUpdate }) => {
-    const whatsLeft = calculateWhatsLeft(project.estRt, project.totalEdited);
+    const whatsLeft = calculateWhatsLeft(project.est_rt, project.total_edited);
     
     const handleInputChange = (field: keyof Project, value: string) => {
         const numValue = parseFloat(value) || 0;
@@ -558,14 +554,14 @@ export const EditorRow: React.FC<EditorRowProps> = ({ project, onUpdate }) => {
     };
 
     return (
-        <div className={`grid grid-cols-2 md:grid-cols-7 gap-4 items-center p-3 border-b border-gray-200 ${project.isOnHold ? 'bg-pink-50' : ''}`}>
+        <div className={`grid grid-cols-2 md:grid-cols-7 gap-4 items-center p-3 border-b border-gray-200 ${project.is_on_hold ? 'bg-pink-50' : ''}`}>
             <div className="col-span-2 md:col-span-3">
                 <input type="text" value={project.title} onChange={(e) => onUpdate(project.id, 'title', e.target.value)} className={`font-semibold text-gray-800 ${INLINE_INPUT_CLASS}`} placeholder="Project Title" />
                 <div className="flex flex-wrap items-center text-sm text-gray-500 mt-1 gap-x-2">
                     <DueDateDisplay
-                        dueDate={project.dueDate}
-                        originalDueDate={project.originalDueDate}
-                        onUpdate={(newDate) => onUpdate(project.id, 'dueDate', newDate)}
+                        due_date={project.due_date}
+                        original_due_date={project.original_due_date}
+                        onUpdate={(newDate) => onUpdate(project.id, 'due_date', newDate)}
                     />
                     <span className="hidden sm:inline">|</span>
                     <span className="flex items-center">
@@ -573,23 +569,23 @@ export const EditorRow: React.FC<EditorRowProps> = ({ project, onUpdate }) => {
                         <div className="w-24 ml-1">
                           <SelectInput value={project.editor} onChange={(val) => onUpdate(project.id, 'editor', val)} options={editors} placeholder="Name" className={`${INLINE_INPUT_CLASS}`} />
                         </div>
-                        <input type="text" value={project.editorNote} onChange={(e) => onUpdate(project.id, 'editorNote', e.target.value)} className={`${INLINE_INPUT_CLASS} flex-grow ml-1`} placeholder="Note..."/>
+                        <input type="text" value={project.editor_note} onChange={(e) => onUpdate(project.id, 'editor_note', e.target.value)} className={`${INLINE_INPUT_CLASS} flex-grow ml-1`} placeholder="Note..."/>
                     </span>
                 </div>
             </div>
             <div className="text-center">
                 <label className="text-xs text-gray-500 block text-center mb-1">EST RT</label>
                 <input
-                    type="number" step="0.01" value={project.estRt}
-                    onChange={(e) => handleInputChange('estRt', e.target.value)}
+                    type="number" step="0.01" value={project.est_rt}
+                    onChange={(e) => handleInputChange('est_rt', e.target.value)}
                     className={`w-full border-gray-300 rounded-md shadow-sm text-center p-1`}
                 />
             </div>
             <div>
                 <label className="text-xs text-gray-500 block text-center mb-1">Total Edited</label>
                 <input
-                    type="number" step="0.01" value={project.totalEdited}
-                    onChange={(e) => handleInputChange('totalEdited', e.target.value)}
+                    type="number" step="0.01" value={project.total_edited}
+                    onChange={(e) => handleInputChange('total_edited', e.target.value)}
                     className="font-bold text-lg w-full border-gray-300 rounded-md shadow-sm text-center p-1"
                 />
             </div>
@@ -600,8 +596,8 @@ export const EditorRow: React.FC<EditorRowProps> = ({ project, onUpdate }) => {
              <div>
                 <label className="text-xs text-gray-500 block text-center mb-1">Remaining RAW</label>
                 <input
-                    type="number" step="0.01" value={project.remainingRaw}
-                    onChange={(e) => handleInputChange('remainingRaw', e.target.value)}
+                    type="number" step="0.01" value={project.remaining_raw}
+                    onChange={(e) => handleInputChange('remaining_raw', e.target.value)}
                     className="font-bold text-lg w-full border-gray-300 rounded-md shadow-sm text-center p-1"
                 />
             </div>

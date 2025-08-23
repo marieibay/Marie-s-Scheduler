@@ -1,20 +1,21 @@
 
 export interface Project {
   id: number;
+  created_at: string;
   title: string;
-  dueDate: string; // Stored as YYYY-MM-DD
-  originalDueDate: string; // Stored as YYYY-MM-DD
+  due_date: string | null;
+  original_due_date: string | null;
   notes: string;
   editor: string;
-  editorNote: string;
-  pzQc: string;
-  pzQcNote: string;
+  editor_note: string;
+  pz_qc: string;
+  pz_qc_note: string;
   master: string;
-  masterNote: string;
-  estRt: number;
-  totalEdited: number;
-  remainingRaw: number;
-  isOnHold: boolean;
+  master_note: string;
+  est_rt: number;
+  total_edited: number;
+  remaining_raw: number;
+  is_on_hold: boolean;
   status: 'ongoing' | 'done' | 'archived';
 }
 
