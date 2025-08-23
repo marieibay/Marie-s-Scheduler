@@ -22,20 +22,20 @@ const EditorPage: React.FC = () => {
         };
         fetchProjects();
 
-        const channel = supabase.channel('editor-projects')
+        const channel = supabase.channel('realtime-projects')
           .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, payload => {
               if (payload.eventType === 'INSERT') {
                   setProjects(currentProjects => {
                     const newProject = payload.new as Project;
-                    if (currentProjects.some(p => p.id === newProject.id)) {
-                        return currentProjects;
+                     if (currentProjects.some(p => p.id === newProject.id)) {
+                        return currentProjects.map(p => p.id === newProject.id ? newProject : p);
                     }
                     return [newProject, ...currentProjects];
                   });
               } else if (payload.eventType === 'UPDATE') {
                   setProjects(currentProjects => currentProjects.map(p => p.id === payload.new.id ? payload.new as Project : p));
               } else if (payload.eventType === 'DELETE') {
-                  setProjects(currentProjects => currentProjects.filter(p => p.id !== payload.old.id));
+                  setProjects(currentProjects => currentProjects.filter(p => p.id !== (payload.old as Project).id));
               }
           }).subscribe();
 
@@ -76,9 +76,6 @@ const EditorPage: React.FC = () => {
                 <h1 className="text-3xl font-bold text-gray-900">Audiobook Production Dashboard</h1>
                 <p className="text-gray-600">Editor Workflow</p>
             </div>
-            <a href="/" className="px-4 py-2 bg-indigo-600 text-white rounded-lg shadow hover:bg-indigo-700 transition-colors text-sm font-semibold">
-                &larr; Back to Manager Dashboard
-            </a>
         </header>
         <main>
           <EditorView projects={editorProjects} onUpdate={handleUpdateProjectField} />
@@ -102,7 +99,7 @@ const ManagerDashboard: React.FC = () => {
         };
         fetchProjects();
 
-        const channel = supabase.channel('manager-projects')
+        const channel = supabase.channel('realtime-projects')
           .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, payload => {
               if (payload.eventType === 'INSERT') {
                   setProjects(currentProjects => {
