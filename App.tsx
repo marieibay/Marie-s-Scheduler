@@ -16,7 +16,7 @@ const EditorPage: React.FC = () => {
 
     useEffect(() => {
         const fetchProjects = async () => {
-            const { data, error } = await supabase.from('projects').select('*');
+            const { data, error } = await supabase.from('projects').select('*').eq('status', 'ongoing');
             if (error) console.error('Error fetching editor projects:', error.message);
             else setProjects(data || []);
         };
@@ -27,7 +27,6 @@ const EditorPage: React.FC = () => {
               if (payload.eventType === 'INSERT') {
                   setProjects(currentProjects => {
                     const newProject = payload.new as Project;
-                    // Avoid adding duplicates if the project was already added optimistically
                     if (currentProjects.some(p => p.id === newProject.id)) {
                         return currentProjects;
                     }
@@ -46,7 +45,6 @@ const EditorPage: React.FC = () => {
     }, []);
 
     const handleUpdateProjectField = useCallback(async (id: number, field: keyof Project, value: string | number | boolean) => {
-        // Optimistically update editor view
         setProjects(currentProjects =>
             currentProjects.map(p =>
                 p.id === id ? { ...p, [field]: value } : p
@@ -55,8 +53,7 @@ const EditorPage: React.FC = () => {
         const { error } = await supabase.from('projects').update({ [field]: value }).eq('id', id);
         if (error) {
             console.error('Error updating project field:', error.message);
-            // Simple revert on error by refetching
-             const { data, error: fetchError } = await supabase.from('projects').select('*');
+             const { data, error: fetchError } = await supabase.from('projects').select('*').eq('status', 'ongoing');
             if (fetchError) console.error('Error refetching editor projects:', fetchError.message);
             else setProjects(data || []);
         }
@@ -94,7 +91,7 @@ const EditorPage: React.FC = () => {
 const ManagerDashboard: React.FC = () => {
     const [projects, setProjects] = useState<Project[]>([]);
     const [viewMode, setViewMode] = useState<ViewMode>('manager');
-    const [currentPage, setCurrentPage] = useState<'ongoing' | 'done' | 'archived'>('ongoing');
+    const [currentPage, setCurrentPage] = useState<'ongoing' | 'done' | 'archived' | 'editorView'>('ongoing');
     const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
 
     useEffect(() => {
@@ -111,14 +108,14 @@ const ManagerDashboard: React.FC = () => {
                   setProjects(currentProjects => {
                     const newProject = payload.new as Project;
                     if (currentProjects.some(p => p.id === newProject.id)) {
-                        return currentProjects;
+                        return currentProjects.map(p => p.id === newProject.id ? newProject : p);
                     }
                     return [newProject, ...currentProjects];
                   });
               } else if (payload.eventType === 'UPDATE') {
                   setProjects(currentProjects => currentProjects.map(p => p.id === payload.new.id ? payload.new as Project : p));
               } else if (payload.eventType === 'DELETE') {
-                  setProjects(currentProjects => currentProjects.filter(p => p.id !== payload.old.id));
+                  setProjects(currentProjects => currentProjects.filter(p => p.id !== (payload.old as Project).id));
               }
           }).subscribe();
 
@@ -134,16 +131,10 @@ const ManagerDashboard: React.FC = () => {
                 const isAUnassigned = !a.editor && !a.master && !a.pz_qc;
                 const isBUnassigned = !b.editor && !b.master && !b.pz_qc;
 
-                // Prioritize unassigned projects to the top
-                if (isAUnassigned && !isBUnassigned) {
-                    return -1; // a comes first
-                }
-                if (!isAUnassigned && isBUnassigned) {
-                    return 1; // b comes first
-                }
+                if (isAUnassigned && !isBUnassigned) return -1;
+                if (!isAUnassigned && isBUnassigned) return 1;
 
-                // For projects in the same group (both unassigned or both assigned), sort by due_date
-                if (!a.due_date) return 1; // No due date goes to the bottom
+                if (!a.due_date) return 1;
                 if (!b.due_date) return -1;
                 return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
             });
@@ -151,19 +142,8 @@ const ManagerDashboard: React.FC = () => {
     const doneProjects = useMemo(() => projects.filter(p => p.status === 'done'), [projects]);
     const archivedProjects = useMemo(() => projects.filter(p => p.status === 'archived'), [projects]);
     
-    const handleSwitchView = (mode: ViewMode) => {
-        if (mode === 'editor') {
-            window.history.pushState({}, '', '/editor');
-            const navEvent = new PopStateEvent('popstate');
-            window.dispatchEvent(navEvent);
-        } else {
-            setViewMode(mode);
-        }
-    };
-
     const handleAddNewProject = useCallback(async () => {
-      // 1. Create a temporary project for instant UI feedback.
-      const tempId = Date.now();
+      const tempId = -Date.now(); // Use negative temp ID
       const tempProject: Project = {
         id: tempId,
         created_at: new Date().toISOString(),
@@ -184,41 +164,29 @@ const ManagerDashboard: React.FC = () => {
         status: 'ongoing' as const,
       };
 
-      // 2. Optimistically add the temporary project to the state.
       setProjects(currentProjects => [tempProject, ...currentProjects]);
       setCurrentPage('ongoing');
 
-      // 3. Prepare the data for Supabase (without the temporary id and created_at).
       const { id, created_at, ...newProjectData } = tempProject;
 
-      // 4. Send the request to Supabase.
       const { data: newProject, error } = await supabase
         .from('projects')
         .insert(newProjectData)
         .select()
         .single();
 
-      // 5. Handle the response.
       if (error) {
           console.error("Error creating project:", error);
-          alert(`Failed to add project: ${error.message}\n\nThis is often caused by Row Level Security (RLS) being enabled on your 'projects' table without a policy that allows inserts. Please check your Supabase dashboard under 'Authentication' > 'Policies' and consider disabling RLS for the projects table if this app is for a trusted group of users.`);
-          // On error, remove the temporary project from the UI.
+          alert(`Failed to add project: ${error.message}`);
           setProjects(currentProjects => currentProjects.filter(p => p.id !== tempId));
       } else if (newProject) {
-          // On success, replace the temporary project with the real one from the database.
           setProjects(currentProjects => 
             currentProjects.map(p => p.id === tempId ? newProject : p)
           );
-      } else {
-          console.error("Error creating project: Supabase returned no error, but no new project data was received.");
-          alert("An unexpected error occurred while adding the project. Please refresh the page and try again.");
-          // On weird error, remove temp project.
-          setProjects(currentProjects => currentProjects.filter(p => p.id !== tempId));
       }
     }, []);
 
     const handleUpdateProjectField = useCallback(async (id: number, field: keyof Project, value: string | number | boolean | null) => {
-        // Optimistically update the UI for instant feedback
         setProjects(currentProjects =>
             currentProjects.map(p =>
                 p.id === id ? { ...p, [field]: value } : p
@@ -229,49 +197,40 @@ const ManagerDashboard: React.FC = () => {
 
         if (error) {
             console.error('Error updating project field:', error.message);
-            alert(`Failed to update project: ${error.message}. The view will be refreshed to ensure data consistency.`);
-            // On failure, refetch all data to revert the optimistic update and ensure consistency
+            alert(`Failed to update project: ${error.message}.`);
             const { data, error: fetchError } = await supabase.from('projects').select('*');
-            if (fetchError) {
-                console.error('Error refetching projects after update failure:', fetchError.message);
-            } else {
-                setProjects(data || []);
-            }
+            if (fetchError) console.error('Error refetching projects:', fetchError.message);
+            else setProjects(data || []);
         }
     }, []);
     
     const handleSortByDate = useCallback(() => {
         setProjects(prevProjects => {
-            const currentProjects = prevProjects.filter(p => p.status === currentPage);
-            const otherProjects = prevProjects.filter(p => p.status !== currentPage);
+            const currentTab = currentPage === 'editorView' ? 'ongoing' : currentPage;
+            const projectsForPage = prevProjects.filter(p => p.status === currentTab);
+            const otherProjects = prevProjects.filter(p => p.status !== currentTab);
 
-            const sortedCurrent = [...currentProjects].sort((a, b) => {
+            const sorted = [...projectsForPage].sort((a, b) => {
                 if (!a.due_date) return 1;
                 if (!b.due_date) return -1;
                 return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
             });
 
-            return [...sortedCurrent, ...otherProjects];
+            return [...sorted, ...otherProjects];
         });
     }, [currentPage]);
 
-    const handleOpenDeleteModal = useCallback((project: Project) => {
-        setProjectToDelete(project);
-    }, []);
-
-    const handleCloseDeleteModal = useCallback(() => {
-        setProjectToDelete(null);
-    }, []);
-
+    const handleOpenDeleteModal = useCallback((project: Project) => setProjectToDelete(project), []);
+    const handleCloseDeleteModal = useCallback(() => setProjectToDelete(null), []);
     const handleConfirmDelete = useCallback(async () => {
         if (projectToDelete) {
             setProjects(currentProjects => currentProjects.filter(p => p.id !== projectToDelete.id));
             const { error } = await supabase.from('projects').delete().eq('id', projectToDelete.id);
             if(error) {
                 console.error("Error deleting project:", error.message);
-                alert(`Failed to delete project: ${error.message}. The view will be refreshed.`);
+                alert(`Failed to delete project: ${error.message}.`);
                 const { data, error: fetchError } = await supabase.from('projects').select('*');
-                if (fetchError) console.error('Error refetching projects after delete failure:', fetchError.message);
+                if (fetchError) console.error('Error refetching projects:', fetchError.message);
                 else setProjects(data || []);
             }
             setProjectToDelete(null);
@@ -279,29 +238,21 @@ const ManagerDashboard: React.FC = () => {
     }, [projectToDelete]);
 
     const renderCurrentView = () => {
+        if (currentPage === 'editorView') {
+            return <EditorView projects={ongoingProjects} onUpdate={handleUpdateProjectField} />;
+        }
+
         let projectsForPage: Project[];
         switch(currentPage) {
-            case 'ongoing':
-                projectsForPage = ongoingProjects;
-                break;
-            case 'done':
-                projectsForPage = doneProjects;
-                break;
-            case 'archived':
-                projectsForPage = archivedProjects;
-                break;
-            default:
-                projectsForPage = [];
+            case 'ongoing': projectsForPage = ongoingProjects; break;
+            case 'done': projectsForPage = doneProjects; break;
+            case 'archived': projectsForPage = archivedProjects; break;
+            default: projectsForPage = [];
         }
         
-        switch (viewMode) {
-            case 'manager':
-                return <ManagerView projects={projectsForPage} onUpdate={handleUpdateProjectField} onDelete={handleOpenDeleteModal} />;
-            case 'client':
-                return <ClientView projects={projectsForPage} onUpdate={handleUpdateProjectField} />;
-            default:
-                return null;
-        }
+        return viewMode === 'manager'
+            ? <ManagerView projects={projectsForPage} onUpdate={handleUpdateProjectField} onDelete={handleOpenDeleteModal} />
+            : <ClientView projects={projectsForPage} onUpdate={handleUpdateProjectField} />;
     };
 
     return (
@@ -330,6 +281,7 @@ const ManagerDashboard: React.FC = () => {
                                     <button onClick={() => setCurrentPage('ongoing')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${currentPage === 'ongoing' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>Ongoing Edits</button>
                                     <button onClick={() => setCurrentPage('done')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${currentPage === 'done' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>Edit Done</button>
                                     <button onClick={() => setCurrentPage('archived')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${currentPage === 'archived' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>Archived Projects</button>
+                                    <button onClick={() => setCurrentPage('editorView')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${currentPage === 'editorView' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>Editor View</button>
                                 </div>
                                 {viewMode === 'manager' && (
                                     <button onClick={handleSortByDate} className="px-4 py-2 rounded-lg text-sm font-semibold transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300 shadow-sm">
@@ -341,9 +293,8 @@ const ManagerDashboard: React.FC = () => {
                             <div className="flex items-center gap-4 sm:ml-auto">
                                 <div className="flex items-center space-x-2 bg-gray-100 p-1 rounded-lg">
                                     <span className="text-sm font-medium hidden sm:block px-2">View Mode:</span>
-                                    <button onClick={() => handleSwitchView('manager')} className={`px-3 py-1 rounded-md text-sm shadow-sm transition-colors ${viewMode === 'manager' ? 'bg-white text-indigo-700' : 'bg-transparent text-gray-700'}`}>Manager</button>
-                                    <button onClick={() => handleSwitchView('client')} className={`px-3 py-1 rounded-md text-sm shadow-sm transition-colors ${viewMode === 'client' ? 'bg-white text-indigo-700' : 'bg-transparent text-gray-700'}`}>Client</button>
-                                    <button onClick={() => handleSwitchView('editor')} className={`px-3 py-1 rounded-md text-sm shadow-sm transition-colors bg-transparent text-gray-700`}>Editor</button>
+                                    <button onClick={() => setViewMode('manager')} className={`px-3 py-1 rounded-md text-sm shadow-sm transition-colors ${viewMode === 'manager' ? 'bg-white text-indigo-700' : 'bg-transparent text-gray-700'}`}>Manager</button>
+                                    <button onClick={() => setViewMode('client')} className={`px-3 py-1 rounded-md text-sm shadow-sm transition-colors ${viewMode === 'client' ? 'bg-white text-indigo-700' : 'bg-transparent text-gray-700'}`}>Client</button>
                                 </div>
                             </div>
                         </div>
@@ -375,6 +326,14 @@ const App: React.FC = () => {
             setRoute(window.location.pathname);
         };
         window.addEventListener('popstate', onLocationChange);
+        // Also handle direct navigation and refreshes
+        window.history.pushState = new Proxy(window.history.pushState, {
+            apply: (target, thisArg, argArray) => {
+                target.apply(thisArg, argArray);
+                onLocationChange();
+                return target;
+            },
+        });
         return () => window.removeEventListener('popstate', onLocationChange);
     }, []);
 
