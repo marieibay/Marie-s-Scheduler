@@ -32,13 +32,131 @@ const TrashIcon: React.FC = () => (
     </svg>
 );
 
-const CalendarIcon: React.FC = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 text-gray-400 group-hover:text-gray-600" viewBox="0 0 20 20" fill="currentColor">
-      <path fillRule="evenodd" d="M6 2a1 1 0 00-1 1v1H4a2 2 0 00-2 2v10a2 2 0 002 2h12a2 2 0 002-2V6a2 2 0 00-2-2h-1V3a1 1 0 10-2 0v1H7V3a1 1 0 00-1-1zm0 5a1 1 0 000 2h8a1 1 0 100-2H6z" clipRule="evenodd" />
-    </svg>
+const StrikethroughIcon: React.FC = () => (
+  <svg
+    className="h-5 w-5"
+    viewBox="0 0 20 20"
+    fill="none"
+    stroke="currentColor"
+    strokeWidth="1.5"
+    strokeLinecap="round"
+    strokeLinejoin="round"
+  >
+    <path d="M4 10H16" />
+    <path d="M8.5 4.5S6.5 6.5 6.5 8c0 1.5 2 1.5 3.5 2.5s2.5 1.5 2.5 3c0 1.5-2 1.5-3.5 0.5" />
+  </svg>
 );
 
+
 // --- CHILD COMPONENTS ---
+
+// Rich Text Input for Notes
+interface RichTextInputProps {
+    value: string;
+    onChange: (newValue: string) => void;
+    placeholder?: string;
+}
+
+const ToolbarButton: React.FC<{onClick: () => void; title: string; children: React.ReactNode; isActive?: boolean;}> = ({onClick, title, children, isActive}) => (
+    <button
+        type="button"
+        onClick={onClick}
+        className={`px-3 py-1.5 text-sm font-semibold text-gray-700 hover:bg-gray-100 rounded-md flex items-center justify-center ${isActive ? 'bg-indigo-100 text-indigo-700' : ''}`}
+        title={title}
+    >
+        {children}
+    </button>
+);
+
+const ColorButton: React.FC<{onClick: () => void; title: string; color: string;}> = ({onClick, title, color}) => (
+    <button
+        type="button"
+        onClick={onClick}
+        className="w-6 h-6 rounded-full border-2 border-white ring-1 ring-gray-300 hover:scale-110 transition-transform focus:outline-none focus:ring-2 focus:ring-indigo-500"
+        title={title}
+        style={{ backgroundColor: color }}
+    />
+);
+
+
+const RichTextInput: React.FC<RichTextInputProps> = ({ value, onChange, placeholder }) => {
+    const [isFocused, setIsFocused] = useState(false);
+    const editorRef = useRef<HTMLDivElement>(null);
+    const valueRef = useRef(value);
+
+    useEffect(() => {
+        valueRef.current = value;
+        // If the editor is not focused, update its content to match external changes
+        if (editorRef.current && document.activeElement !== editorRef.current) {
+            editorRef.current.innerHTML = value;
+        }
+    }, [value]);
+
+    const handleFocus = () => setIsFocused(true);
+
+    const handleBlur = (e: React.FocusEvent<HTMLDivElement>) => {
+        const newHtml = e.currentTarget.innerHTML;
+        if (newHtml !== valueRef.current) {
+            onChange(newHtml);
+            valueRef.current = newHtml;
+        }
+        setIsFocused(false);
+    };
+    
+    const handleToolbarMouseDown = (e: React.MouseEvent) => {
+        e.preventDefault();
+    };
+
+    const applyFormat = (command: string, value?: string) => {
+        if (editorRef.current) {
+            editorRef.current.focus();
+            document.execCommand(command, false, value);
+        }
+    };
+
+    return (
+        <div className="relative">
+            {isFocused && (
+                <div 
+                    onMouseDown={handleToolbarMouseDown}
+                    className="absolute -top-12 left-0 z-10 bg-white border border-gray-200 rounded-lg shadow-xl p-1 flex items-center gap-1"
+                >
+                    <ToolbarButton onClick={() => applyFormat('bold')} title="Bold">
+                        <span className="font-bold">B</span>
+                    </ToolbarButton>
+                    <ToolbarButton onClick={() => applyFormat('strikeThrough')} title="Strikethrough">
+                        <StrikethroughIcon />
+                    </ToolbarButton>
+
+                    <div className="h-6 w-px bg-gray-200 mx-1"></div>
+
+                    <ToolbarButton onClick={() => applyFormat('fontSize', '1')} title="Small Text">S</ToolbarButton>
+                    <ToolbarButton onClick={() => applyFormat('fontSize', '3')} title="Medium Text">M</ToolbarButton>
+                    <ToolbarButton onClick={() => applyFormat('fontSize', '5')} title="Large Text">L</ToolbarButton>
+
+                    <div className="h-6 w-px bg-gray-200 mx-1"></div>
+                    
+                    <div className="flex items-center gap-2 px-1">
+                        <ColorButton onClick={() => applyFormat('foreColor', '#374151')} title="Default Gray" color="#374151" />
+                        <ColorButton onClick={() => applyFormat('foreColor', '#EF4444')} title="Red" color="#EF4444" />
+                        <ColorButton onClick={() => applyFormat('foreColor', '#F59E0B')} title="Yellow" color="#F59E0B" />
+                    </div>
+                </div>
+            )}
+            <div
+                ref={editorRef}
+                contentEditable
+                onFocus={handleFocus}
+                onBlur={handleBlur}
+                dangerouslySetInnerHTML={{ __html: value }}
+                data-placeholder={placeholder}
+                className="w-full p-2 border border-gray-300 rounded-md shadow-sm focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500 focus:outline-none overflow-y-auto empty:before:content-[attr(data-placeholder)] empty:before:text-gray-400 whitespace-pre-wrap resize-y"
+                style={{minHeight: '6rem'}}
+            />
+        </div>
+    );
+};
+
 
 // Delete Confirmation Modal
 interface DeleteConfirmationModalProps {
@@ -175,7 +293,6 @@ export const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ due_date, origin
         >
             <span className="text-sm text-gray-600">Due:</span>
             <span className={`font-bold text-lg w-[85px] group-hover:text-red-700 transition-colors ${!due_date ? 'text-gray-400' : 'text-red-600'}`}>{formattedDate}</span>
-            <CalendarIcon />
             <div className="w-5 h-5 flex items-center justify-center">{alertIcon}</div>
             {isUpdated && (
                 <span className="px-2 py-0.5 text-xs font-semibold text-blue-800 bg-blue-100 rounded-full">
@@ -344,11 +461,10 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onD
                     original_due_date={project.original_due_date}
                     onUpdate={(newDate) => handleUpdate('due_date', newDate)}
                 />
-                <textarea
+                <RichTextInput
                     value={project.notes}
-                    onChange={(e) => handleUpdate('notes', e.target.value)}
+                    onChange={(newValue) => handleUpdate('notes', newValue)}
                     placeholder="Notes..."
-                    className="w-full h-24 p-2 border border-gray-300 rounded-md shadow-sm focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
                 />
             </div>
 
