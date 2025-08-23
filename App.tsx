@@ -25,7 +25,14 @@ const EditorPage: React.FC = () => {
         const channel = supabase.channel('editor-projects')
           .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, payload => {
               if (payload.eventType === 'INSERT') {
-                  setProjects(currentProjects => [payload.new as Project, ...currentProjects]);
+                  setProjects(currentProjects => {
+                    const newProject = payload.new as Project;
+                    // Avoid adding duplicates if the project was already added optimistically
+                    if (currentProjects.some(p => p.id === newProject.id)) {
+                        return currentProjects;
+                    }
+                    return [newProject, ...currentProjects];
+                  });
               } else if (payload.eventType === 'UPDATE') {
                   setProjects(currentProjects => currentProjects.map(p => p.id === payload.new.id ? payload.new as Project : p));
               } else if (payload.eventType === 'DELETE') {
@@ -89,7 +96,14 @@ const ManagerDashboard: React.FC = () => {
         const channel = supabase.channel('manager-projects')
           .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, payload => {
               if (payload.eventType === 'INSERT') {
-                  setProjects(currentProjects => [payload.new as Project, ...currentProjects]);
+                  setProjects(currentProjects => {
+                    const newProject = payload.new as Project;
+                    // Avoid adding duplicates if the project was already added for immediate feedback
+                    if (currentProjects.some(p => p.id === newProject.id)) {
+                        return currentProjects;
+                    }
+                    return [newProject, ...currentProjects];
+                  });
               } else if (payload.eventType === 'UPDATE') {
                   setProjects(currentProjects => currentProjects.map(p => p.id === payload.new.id ? payload.new as Project : p));
               } else if (payload.eventType === 'DELETE') {
@@ -134,9 +148,22 @@ const ManagerDashboard: React.FC = () => {
         is_on_hold: false,
         status: 'ongoing' as const,
       };
-      const { error } = await supabase.from('projects').insert([newProjectData]);
-      if (error) console.error("Error creating project:", error.message);
-      else setCurrentPage('ongoing');
+
+      const { data: newProject, error } = await supabase
+        .from('projects')
+        .insert(newProjectData)
+        .select()
+        .single();
+
+      if (error) {
+          console.error("Error creating project:", error);
+          alert(`Failed to add project: ${error.message}\n\nThis is often caused by Row Level Security (RLS) being enabled on your 'projects' table without a policy that allows inserts. Please check your Supabase dashboard under 'Authentication' > 'Policies' and consider disabling RLS for the projects table if this app is for a trusted group of users.`);
+      } else if (newProject) {
+          // Add the project to state immediately for a responsive UI.
+          // The real-time subscription handler will prevent duplicates.
+          setProjects(currentProjects => [newProject, ...currentProjects]);
+          setCurrentPage('ongoing');
+      }
     }, []);
 
     const handleUpdateProjectField = useCallback(async (id: number, field: keyof Project, value: string | number | boolean | null) => {
