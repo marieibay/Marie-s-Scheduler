@@ -142,7 +142,11 @@ const ManagerDashboard: React.FC = () => {
     };
 
     const handleAddNewProject = useCallback(async () => {
-      const newProjectData = {
+      // 1. Create a temporary project for instant UI feedback.
+      const tempId = Date.now();
+      const tempProject: Project = {
+        id: tempId,
+        created_at: new Date().toISOString(),
         title: 'New Project - Click to Edit Title',
         due_date: new Date().toISOString().split('T')[0],
         original_due_date: new Date().toISOString().split('T')[0],
@@ -160,21 +164,36 @@ const ManagerDashboard: React.FC = () => {
         status: 'ongoing' as const,
       };
 
+      // 2. Optimistically add the temporary project to the state.
+      setProjects(currentProjects => [tempProject, ...currentProjects]);
+      setCurrentPage('ongoing');
+
+      // 3. Prepare the data for Supabase (without the temporary id and created_at).
+      const { id, created_at, ...newProjectData } = tempProject;
+
+      // 4. Send the request to Supabase.
       const { data: newProject, error } = await supabase
         .from('projects')
         .insert(newProjectData)
         .select()
         .single();
 
+      // 5. Handle the response.
       if (error) {
           console.error("Error creating project:", error);
           alert(`Failed to add project: ${error.message}\n\nThis is often caused by Row Level Security (RLS) being enabled on your 'projects' table without a policy that allows inserts. Please check your Supabase dashboard under 'Authentication' > 'Policies' and consider disabling RLS for the projects table if this app is for a trusted group of users.`);
+          // On error, remove the temporary project from the UI.
+          setProjects(currentProjects => currentProjects.filter(p => p.id !== tempId));
       } else if (newProject) {
-          setProjects(currentProjects => [newProject, ...currentProjects]);
-          setCurrentPage('ongoing');
+          // On success, replace the temporary project with the real one from the database.
+          setProjects(currentProjects => 
+            currentProjects.map(p => p.id === tempId ? newProject : p)
+          );
       } else {
           console.error("Error creating project: Supabase returned no error, but no new project data was received.");
           alert("An unexpected error occurred while adding the project. Please refresh the page and try again.");
+          // On weird error, remove temp project.
+          setProjects(currentProjects => currentProjects.filter(p => p.id !== tempId));
       }
     }, []);
 
@@ -226,8 +245,15 @@ const ManagerDashboard: React.FC = () => {
 
     const handleConfirmDelete = useCallback(async () => {
         if (projectToDelete) {
+            setProjects(currentProjects => currentProjects.filter(p => p.id !== projectToDelete.id));
             const { error } = await supabase.from('projects').delete().eq('id', projectToDelete.id);
-            if(error) console.error("Error deleting project:", error.message);
+            if(error) {
+                console.error("Error deleting project:", error.message);
+                alert(`Failed to delete project: ${error.message}. The view will be refreshed.`);
+                const { data, error: fetchError } = await supabase.from('projects').select('*');
+                if (fetchError) console.error('Error refetching projects after delete failure:', fetchError.message);
+                else setProjects(data || []);
+            }
             setProjectToDelete(null);
         }
     }, [projectToDelete]);
