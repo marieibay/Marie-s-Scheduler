@@ -494,6 +494,16 @@ export const ClientView: React.FC<ClientViewProps> = ({ projects, onUpdate }) =>
             acc[client].push(project);
             return acc;
         }, {} as Record<string, Project[]>);
+
+        // Sort projects within each group by due date
+        for (const clientName in groups) {
+            groups[clientName].sort((a, b) => {
+                if (!a.dueDate) return 1; // Projects without a due date go to the end
+                if (!b.dueDate) return -1;
+                return new Date(a.dueDate).getTime() - new Date(b.dueDate).getTime();
+            });
+        }
+
         return groups;
     }, [projects]);
 
