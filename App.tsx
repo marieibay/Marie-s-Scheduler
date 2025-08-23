@@ -7,7 +7,8 @@ import {
     ClientView, 
     EditorView,
     DeleteConfirmationModal,
-    PlusIcon
+    PlusIcon,
+    DailyNotesWidget
 } from './components';
 
 // --- CHILD COMPONENTS (Now receive state and handlers via props) ---
@@ -44,9 +45,11 @@ const EditorPage: React.FC<{
 
 const ManagerDashboard: React.FC<{
     projects: Project[];
+    dailyNotesContent: string;
     onAddProject: () => void;
     onUpdateProject: (id: number, field: keyof Project, value: string | number | boolean | null) => void;
-}> = ({ projects, onAddProject, onUpdateProject }) => {
+    onNotesChange: (newContent: string) => void;
+}> = ({ projects, dailyNotesContent, onAddProject, onUpdateProject, onNotesChange }) => {
     const [viewMode, setViewMode] = useState<ViewMode>('manager');
     const [currentPage, setCurrentPage] = useState<'ongoing' | 'done' | 'archived' | 'editorView'>('ongoing');
     const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
@@ -57,7 +60,10 @@ const ManagerDashboard: React.FC<{
         setSortByDate(false);
     }, [currentPage]);
     
-    const ongoingProjects = useMemo(() => {
+    // --- DERIVE STATE DIRECTLY FROM PROPS ON EVERY RENDER ---
+    // This fixes the stale state bug by removing useMemo.
+    
+    const ongoingProjects = (() => {
         const filtered = projects.filter(p => p.status === 'ongoing');
         
         if (sortByDate && currentPage === 'ongoing') {
@@ -80,10 +86,10 @@ const ManagerDashboard: React.FC<{
             if (!b.due_date) return -1;
             return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
         });
-    }, [projects, currentPage, sortByDate]);
+    })();
 
-    const doneProjects = useMemo(() => projects.filter(p => p.status === 'done'), [projects]);
-    const archivedProjects = useMemo(() => projects.filter(p => p.status === 'archived'), [projects]);
+    const doneProjects = projects.filter(p => p.status === 'done');
+    const archivedProjects = projects.filter(p => p.status === 'archived');
     
     const handleSortByDate = useCallback(() => {
         setSortByDate(prev => !prev);
@@ -164,7 +170,10 @@ const ManagerDashboard: React.FC<{
             </div>
 
             <main className="container mx-auto px-4 md:px-8 py-8">
-                 {renderCurrentView()}
+                 {viewMode === 'manager' && <DailyNotesWidget content={dailyNotesContent} onContentChange={onNotesChange} />}
+                 <div className="mt-8">
+                    {renderCurrentView()}
+                 </div>
             </main>
 
             {projectToDelete && (
@@ -181,10 +190,12 @@ const ManagerDashboard: React.FC<{
 // --- MAIN APP CONTAINER (Manages state, data fetching, and routing) ---
 const App: React.FC = () => {
     const [projects, setProjects] = useState<Project[]>([]);
+    const [dailyNotesContent, setDailyNotesContent] = useState('');
     const [route, setRoute] = useState(window.location.pathname);
 
     // --- CENTRALIZED DATA FETCHING & REAL-TIME SUBSCRIPTION ---
     useEffect(() => {
+        // Fetch projects
         const fetchProjects = async () => {
             const { data, error } = await supabase.from('projects').select('*');
             if (error) console.error('Error fetching initial projects:', error.message);
@@ -192,13 +203,20 @@ const App: React.FC = () => {
         };
         fetchProjects();
 
-        // The single, authoritative subscription for the entire application
-        const channel = supabase.channel('projects')
+        // Fetch daily notes
+        const fetchNotes = async () => {
+            const { data, error } = await supabase.from('daily_notes').select('content').eq('id', 1).single();
+            if (error) console.error('Error fetching notes:', error.message);
+            else setDailyNotesContent(data?.content || '');
+        };
+        fetchNotes();
+
+        // Subscribe to project changes
+        const projectsChannel = supabase.channel('projects')
           .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, payload => {
               if (payload.eventType === 'INSERT') {
                   setProjects(currentProjects => {
                     const newProject = payload.new as Project;
-                    // Avoid duplicates from optimistic updates
                     if (currentProjects.some(p => p.id === newProject.id)) {
                         return currentProjects.map(p => p.id === newProject.id ? newProject : p);
                     }
@@ -211,12 +229,33 @@ const App: React.FC = () => {
               }
           }).subscribe();
 
+        // Subscribe to daily notes changes
+        const notesChannel = supabase.channel('daily_notes')
+          .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'daily_notes', filter: 'id=eq.1' }, payload => {
+            setDailyNotesContent((payload.new as { content: string }).content);
+          }).subscribe();
+
         return () => {
-            supabase.removeChannel(channel);
+            supabase.removeChannel(projectsChannel);
+            supabase.removeChannel(notesChannel);
         };
     }, []);
 
     // --- CENTRALIZED HANDLER FUNCTIONS ---
+    
+    const debouncedSaveNotes = useCallback(
+      debounce(async (newContent: string) => {
+        const { error } = await supabase.from('daily_notes').update({ content: newContent, last_updated: new Date().toISOString() }).eq('id', 1);
+        if (error) console.error('Failed to save notes:', error.message);
+      }, 1000), // 1-second debounce
+      []
+    );
+
+    const handleNotesChange = useCallback((newContent: string) => {
+        setDailyNotesContent(newContent);
+        debouncedSaveNotes(newContent);
+    }, [debouncedSaveNotes]);
+
 
     const handleAddNewProject = useCallback(async () => {
         const tempId = -Date.now();
@@ -283,10 +322,19 @@ const App: React.FC = () => {
         return () => window.removeEventListener('popstate', onLocationChange);
     }, []);
 
+    // Helper for debouncing
+    function debounce<F extends (...args: any[]) => any>(func: F, waitFor: number) {
+      let timeout: ReturnType<typeof setTimeout> | null = null;
+      return (...args: Parameters<F>): void => {
+        if (timeout) clearTimeout(timeout);
+        timeout = setTimeout(() => func(...args), waitFor);
+      };
+    }
+
     if (route === '/editor' || route === '/editor.html') {
         return <EditorPage projects={projects} onUpdate={handleUpdateProjectField} />;
     }
-    return <ManagerDashboard projects={projects} onAddProject={handleAddNewProject} onUpdateProject={handleUpdateProjectField} />;
+    return <ManagerDashboard projects={projects} dailyNotesContent={dailyNotesContent} onAddProject={handleAddNewProject} onUpdateProject={handleUpdateProjectField} onNotesChange={handleNotesChange} />;
 };
 
 export default App;

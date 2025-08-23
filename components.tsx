@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { Project, ViewMode } from './types';
 import { editors, masters, qcPersonnel } from './employees';
@@ -48,6 +49,26 @@ const StrikethroughIcon: React.FC = () => (
 
 
 // --- CHILD COMPONENTS ---
+
+// Daily Notes Widget
+interface DailyNotesWidgetProps {
+  content: string;
+  onContentChange: (newContent: string) => void;
+}
+export const DailyNotesWidget: React.FC<DailyNotesWidgetProps> = ({ content, onContentChange }) => {
+    return (
+        <div className="bg-white p-4 rounded-lg shadow-md">
+            <h2 className="text-xl font-bold text-gray-800 mb-3">Daily Notes & Assignments</h2>
+            <textarea
+                value={content}
+                onChange={(e) => onContentChange(e.target.value)}
+                placeholder="List free editors for the day or other important notes..."
+                className="w-full h-32 p-2 border border-gray-300 rounded-md shadow-sm focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
+            />
+        </div>
+    );
+};
+
 
 // Rich Text Input for Notes
 interface RichTextInputProps {

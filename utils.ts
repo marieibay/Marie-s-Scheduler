@@ -9,7 +9,9 @@ export const getClientName = (project: Project): string => {
     if (title.startsWith('ONS:')) return 'ONS';
     if (title.startsWith('ANATOLE')) return 'ANATOLE';
     if (title.startsWith('BLOOMSBURY')) return 'Bloomsbury';
-    if (title.startsWith('PRHA#:')) return 'PRH';
+    // Updated rule: Any title starting with 'PRH' or 'YA' is a PRH project.
+    if (title.startsWith('PRH') || title.startsWith('YA')) return 'PRH';
+    // Fallback for other projects, which are treated as PRH by default.
     return 'PRH';
 };
 
