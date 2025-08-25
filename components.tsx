@@ -377,9 +377,10 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onD
     
     const cardBgClass = useMemo(() => {
         if (project.status === 'done') return 'bg-lime-200 border border-lime-300';
+        if (project.is_new_edit) return 'bg-amber-100 border border-amber-200';
         if (project.is_on_hold) return 'bg-pink-100 border border-pink-300';
         return 'bg-white';
-    }, [project.status, project.is_on_hold]);
+    }, [project.status, project.is_on_hold, project.is_new_edit]);
 
     return (
         <div className={`p-4 rounded-lg shadow-md flex flex-col lg:flex-row items-start gap-6 hover:shadow-lg transition-all duration-300 ${cardBgClass}`} data-id={project.id}>
@@ -397,6 +398,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onD
             <div className="w-full lg:w-7/12 flex-grow">
                 {!isClientView && (
                     <div className="flex justify-end items-center gap-2 mb-4">
+                        <button onClick={() => handleUpdate('is_new_edit', !project.is_new_edit)} className={`px-3 py-1 text-xs font-semibold rounded-md shadow-sm transition-colors whitespace-nowrap ${project.is_new_edit ? 'bg-amber-500 text-white hover:bg-amber-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>New Edit</button>
                         <button onClick={() => handleUpdate('is_on_hold', !project.is_on_hold)} className={`px-3 py-1 text-xs font-semibold rounded-md shadow-sm transition-colors whitespace-nowrap ${project.is_on_hold ? 'bg-yellow-500 text-white hover:bg-yellow-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>{project.is_on_hold ? 'On Hold' : 'Set Hold'}</button>
                         {renderStatusButtons()}
                         {onDelete && <button onClick={() => onDelete(project)} className="p-1.5 rounded-full text-gray-400 hover:bg-red-100 hover:text-red-600" title="Delete"><TrashIcon /></button>}

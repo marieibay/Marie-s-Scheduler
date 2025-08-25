@@ -318,7 +318,10 @@ const App: React.FC = () => {
         const fetchProjects = async () => {
             const { data, error } = await supabase.from('projects').select('*');
             if (error) console.error('Error fetching initial projects:', error.message);
-            else setProjects(data || []);
+            else {
+                const augmentedData = (data || []).map(p => ({ ...p, is_new_edit: false }));
+                setProjects(augmentedData as Project[]);
+            }
         };
         fetchProjects();
 
@@ -335,14 +338,14 @@ const App: React.FC = () => {
           .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, payload => {
               if (payload.eventType === 'INSERT') {
                   setProjects(currentProjects => {
-                    const newProject = payload.new as Project;
+                    const newProject = { ...payload.new, is_new_edit: false } as Project;
                     if (currentProjects.some(p => p.id === newProject.id)) {
                         return currentProjects.map(p => p.id === newProject.id ? newProject : p);
                     }
                     return [newProject, ...currentProjects];
                   });
               } else if (payload.eventType === 'UPDATE') {
-                  setProjects(currentProjects => currentProjects.map(p => p.id === payload.new.id ? payload.new as Project : p));
+                  setProjects(currentProjects => currentProjects.map(p => p.id === payload.new.id ? { ...p, ...payload.new } : p));
               } else if (payload.eventType === 'DELETE') {
                   setProjects(currentProjects => currentProjects.filter(p => p.id !== (payload.old as {id: number}).id));
               }
@@ -382,23 +385,32 @@ const App: React.FC = () => {
             id: tempId, created_at: new Date().toISOString(), title: 'New Project - Click to Edit Title',
             due_date: null, original_due_date: null,
             notes: '', editor: '', editor_note: '', pz_qc: '', pz_qc_note: '', master: '', master_note: '',
-            est_rt: 0, total_edited: 0, remaining_raw: 0, is_on_hold: false, status: 'ongoing' as const,
+            est_rt: 0, total_edited: 0, remaining_raw: 0, is_on_hold: false, is_new_edit: false, status: 'ongoing' as const,
         };
         setProjects(currentProjects => [tempProject, ...currentProjects]);
 
-        const { id, created_at, ...newProjectData } = tempProject;
+        const { id, created_at, is_new_edit, ...newProjectData } = tempProject;
 
-        const { data: newProject, error } = await supabase.from('projects').insert(newProjectData).select().single();
+        const { data: newProjectFromDb, error } = await supabase.from('projects').insert(newProjectData).select().single();
         if (error) {
             console.error("Error creating project:", error);
             alert(`Failed to add project: ${error.message}`);
             setProjects(currentProjects => currentProjects.filter(p => p.id !== tempId));
-        } else if (newProject) {
+        } else if (newProjectFromDb) {
+            const newProject = { ...newProjectFromDb, is_new_edit: false } as Project;
             setProjects(currentProjects => currentProjects.map(p => p.id === tempId ? newProject : p));
         }
     }, []);
 
     const handleUpdateProjectField = useCallback(async (id: number, field: keyof Project, value: any) => {
+        // `is_new_edit` is not a database column, so handle it client-side only to prevent errors.
+        if (field === 'is_new_edit') {
+            setProjects(currentProjects =>
+                currentProjects.map(p => (p.id === id ? { ...p, [field]: value } : p))
+            );
+            return;
+        }
+
         // Handle Delete requests
         if (field === 'status' && value === 'deleted') {
             setProjects(currentProjects => currentProjects.filter(p => p.id !== id));
@@ -406,7 +418,7 @@ const App: React.FC = () => {
             if(error) {
                 alert(`Failed to delete project: ${error.message}.`);
                 const { data } = await supabase.from('projects').select('*');
-                setProjects(data || []);
+                setProjects(data as Project[] || []);
             }
             return;
         }
@@ -423,7 +435,7 @@ const App: React.FC = () => {
             alert(`Failed to update project: ${error.message}.`);
             // Revert on error
             const { data } = await supabase.from('projects').select('*');
-            setProjects(data || []);
+            setProjects(data as Project[] || []);
         }
     }, []);
 

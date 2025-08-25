@@ -16,6 +16,7 @@ export interface Project {
   total_edited: number;
   remaining_raw: number;
   is_on_hold: boolean;
+  is_new_edit: boolean;
   status: 'ongoing' | 'done' | 'archived';
 }
 
