@@ -319,7 +319,7 @@ const App: React.FC = () => {
             const { data, error } = await supabase.from('projects').select('*');
             if (error) console.error('Error fetching initial projects:', error.message);
             else {
-                const augmentedData = (data || []).map(p => ({ ...p, is_new_edit: false }));
+                const augmentedData = (data || []).map(p => ({ ...p, is_new_edit: p.is_new_edit || false }));
                 setProjects(augmentedData as Project[]);
             }
         };
@@ -338,7 +338,7 @@ const App: React.FC = () => {
           .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, payload => {
               if (payload.eventType === 'INSERT') {
                   setProjects(currentProjects => {
-                    const newProject = { ...payload.new, is_new_edit: false } as Project;
+                    const newProject = { ...payload.new, is_new_edit: (payload.new as Project).is_new_edit || false } as Project;
                     if (currentProjects.some(p => p.id === newProject.id)) {
                         return currentProjects.map(p => p.id === newProject.id ? newProject : p);
                     }
@@ -389,55 +389,59 @@ const App: React.FC = () => {
         };
         setProjects(currentProjects => [tempProject, ...currentProjects]);
 
-        const { id, created_at, is_new_edit, ...newProjectData } = tempProject;
+        const { id, created_at, ...newProjectData } = tempProject;
 
         const { data: newProjectFromDb, error } = await supabase.from('projects').insert(newProjectData).select().single();
         if (error) {
-            console.error("Error creating project:", error);
-            alert(`Failed to add project: ${error.message}`);
             setProjects(currentProjects => currentProjects.filter(p => p.id !== tempId));
+            
+            if (error.message.includes("Could not find the 'is_new_edit' column")) {
+                alert("Failed to create project. This feature requires a database change. Please add a boolean column named 'is_new_edit' to your 'projects' table in Supabase.");
+            } else {
+                console.error("Error creating project:", error);
+                alert(`Failed to add project: ${error.message}`);
+            }
         } else if (newProjectFromDb) {
-            const newProject = { ...newProjectFromDb, is_new_edit: false } as Project;
+            const newProject = { ...newProjectFromDb, is_new_edit: newProjectFromDb.is_new_edit || false } as Project;
             setProjects(currentProjects => currentProjects.map(p => p.id === tempId ? newProject : p));
         }
     }, []);
 
     const handleUpdateProjectField = useCallback(async (id: number, field: keyof Project, value: any) => {
-        // `is_new_edit` is not a database column, so handle it client-side only to prevent errors.
-        if (field === 'is_new_edit') {
-            setProjects(currentProjects =>
-                currentProjects.map(p => (p.id === id ? { ...p, [field]: value } : p))
-            );
-            return;
-        }
+        const originalProjects = projects;
 
         // Handle Delete requests
         if (field === 'status' && value === 'deleted') {
             setProjects(currentProjects => currentProjects.filter(p => p.id !== id));
             const { error } = await supabase.from('projects').delete().eq('id', id);
-            if(error) {
+            if (error) {
                 alert(`Failed to delete project: ${error.message}.`);
-                const { data } = await supabase.from('projects').select('*');
-                setProjects(data as Project[] || []);
+                setProjects(originalProjects); // Revert on failure
             }
             return;
         }
 
         // Optimistic UI Update
         setProjects(currentProjects =>
-            currentProjects.map(p => p.id === id ? { ...p, [field]: value } : p)
+            currentProjects.map(p => (p.id === id ? { ...p, [field]: value } : p))
         );
         
         // Update database
         const { error } = await supabase.from('projects').update({ [field]: value }).eq('id', id);
         if (error) {
-            console.error('Error updating project field:', error.message);
-            alert(`Failed to update project: ${error.message}.`);
-            // Revert on error
-            const { data } = await supabase.from('projects').select('*');
-            setProjects(data as Project[] || []);
+            // Revert optimistic update
+            setProjects(originalProjects);
+
+            // Specific error for missing is_new_edit column
+            if (field === 'is_new_edit' && error.message.includes("Could not find the 'is_new_edit' column")) {
+                alert("Failed to save 'New Edit' status. This feature requires a database change. Please add a boolean column named 'is_new_edit' to your 'projects' table in Supabase.");
+            } else {
+                console.error('Error updating project field:', error.message);
+                alert(`Failed to update project: ${error.message}.`);
+            }
         }
-    }, []);
+    }, [projects]);
+
 
     // --- ROUTING ---
     useEffect(() => {
