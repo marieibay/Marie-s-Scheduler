@@ -408,29 +408,61 @@ const App: React.FC = () => {
     }, []);
 
     const handleUpdateProjectField = useCallback(async (id: number, field: keyof Project, value: any) => {
-        const originalProjects = projects;
-
-        // Handle Delete requests
+        // Handle Delete requests separately for cleaner logic
         if (field === 'status' && value === 'deleted') {
-            setProjects(currentProjects => currentProjects.filter(p => p.id !== id));
+            let deletedProject: Project | undefined;
+            let originalIndex: number = -1;
+
+            // Optimistically remove the project and save it and its index for potential rollback
+            setProjects(currentProjects => {
+                originalIndex = currentProjects.findIndex(p => p.id === id);
+                if (originalIndex === -1) return currentProjects; // Not found
+                deletedProject = currentProjects[originalIndex];
+                return currentProjects.filter(p => p.id !== id);
+            });
+
+            if (!deletedProject) return; // Project wasn't found to delete
+
             const { error } = await supabase.from('projects').delete().eq('id', id);
+
             if (error) {
                 alert(`Failed to delete project: ${error.message}.`);
-                setProjects(originalProjects); // Revert on failure
+                // If the delete failed, add the project back at its original position
+                if (deletedProject && originalIndex > -1) {
+                    setProjects(currentProjects => {
+                        const restoredProjects = [...currentProjects];
+                        restoredProjects.splice(originalIndex, 0, deletedProject!);
+                        return restoredProjects;
+                    });
+                }
             }
             return;
         }
 
-        // Optimistic UI Update
-        setProjects(currentProjects =>
-            currentProjects.map(p => (p.id === id ? { ...p, [field]: value } : p))
-        );
-        
+        // Handle field updates
+        let originalProjectState: Project | undefined;
+
+        // Optimistically update the project and save its original state for potential rollback
+        setProjects(currentProjects => {
+            originalProjectState = currentProjects.find(p => p.id === id);
+            if (!originalProjectState) return currentProjects; // Project not found, do nothing.
+            return currentProjects.map(p => (p.id === id ? { ...p, [field]: value } : p));
+        });
+
+        // If we couldn't find the project, don't try to update it in the DB
+        if (!originalProjectState) {
+            console.error(`Project with id ${id} not found for update.`);
+            return;
+        }
+
         // Update database
         const { error } = await supabase.from('projects').update({ [field]: value }).eq('id', id);
+
+        // If there was an error, revert the change using the saved original state
         if (error) {
-            // Revert optimistic update
-            setProjects(originalProjects);
+            setProjects(currentProjects =>
+                currentProjects.map(p => (p.id === id ? originalProjectState! : p))
+            );
 
             // Specific error for missing is_new_edit column
             if (field === 'is_new_edit' && error.message.includes("Could not find the 'is_new_edit' column")) {
@@ -440,7 +472,7 @@ const App: React.FC = () => {
                 alert(`Failed to update project: ${error.message}.`);
             }
         }
-    }, [projects]);
+    }, []);
 
 
     // --- ROUTING ---
