@@ -1,6 +1,6 @@
 
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { Project, ViewMode } from './types';
+import { Project } from './types';
 import { editors, masters, qcPersonnel } from './employees';
 import { getClientName, calculateWhatsLeft } from './utils';
 
@@ -11,6 +11,18 @@ const INLINE_INPUT_CLASS = "bg-transparent focus:bg-white w-full p-1 -m-1 rounde
 export const PlusIcon: React.FC = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
         <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
+    </svg>
+);
+
+export const MemoIcon: React.FC = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth="2">
+      <path strokeLinecap="round" strokeLinejoin="round" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01" />
+    </svg>
+);
+
+export const XIcon: React.FC = () => (
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
     </svg>
 );
 
@@ -54,17 +66,37 @@ const StrikethroughIcon: React.FC = () => (
 interface DailyNotesWidgetProps {
   content: string;
   onContentChange: (newContent: string) => void;
+  onClose: () => void;
 }
-export const DailyNotesWidget: React.FC<DailyNotesWidgetProps> = ({ content, onContentChange }) => {
+export const DailyNotesWidget: React.FC<DailyNotesWidgetProps> = ({ content, onContentChange, onClose }) => {
     return (
-        <div className="bg-white p-4 rounded-lg shadow-md">
-            <h2 className="text-xl font-bold text-gray-800 mb-3">Daily Notes & Assignments</h2>
-            <textarea
-                value={content}
-                onChange={(e) => onContentChange(e.target.value)}
-                placeholder="List free editors for the day or other important notes..."
-                className="w-full h-32 p-2 border border-gray-300 rounded-md shadow-sm focus:ring-1 focus:ring-indigo-500 focus:border-indigo-500"
-            />
+        <div className="fixed bottom-8 right-8 z-30 w-full max-w-md bg-white rounded-xl shadow-2xl border border-gray-200 flex flex-col transform transition-all duration-300 ease-in-out animate-fade-in-up">
+            <div className="flex justify-between items-center p-4 border-b border-gray-200">
+                <h2 className="text-lg font-bold text-gray-800">
+                   Daily Notes & Assignments
+                </h2>
+                <button onClick={onClose} className="p-1 rounded-full text-gray-400 hover:bg-gray-100 hover:text-gray-700 transition-colors" aria-label="Close Notes">
+                    <XIcon />
+                </button>
+            </div>
+            <div className="p-4 bg-gray-50/50">
+                <textarea
+                    value={content}
+                    onChange={(e) => onContentChange(e.target.value)}
+                    placeholder="List free editors for the day or other important notes..."
+                    className="w-full h-64 p-3 border border-gray-300 rounded-md shadow-inner text-sm focus:ring-2 focus:ring-indigo-500 focus:border-indigo-500 resize-none"
+                    aria-label="Daily Notes Input"
+                />
+            </div>
+            <style>{`
+                @keyframes fade-in-up {
+                    0% { opacity: 0; transform: translateY(20px); }
+                    100% { opacity: 1; transform: translateY(0); }
+                }
+                .animate-fade-in-up {
+                    animation: fade-in-up 0.3s ease-out forwards;
+                }
+            `}</style>
         </div>
     );
 };
@@ -105,10 +137,10 @@ const RichTextInput: React.FC<RichTextInputProps> = ({ value, onChange, placehol
     const valueRef = useRef(value);
 
     useEffect(() => {
-        valueRef.current = value;
-        if (editorRef.current && document.activeElement !== editorRef.current) {
+        if (valueRef.current !== value && editorRef.current && document.activeElement !== editorRef.current) {
             editorRef.current.innerHTML = value;
         }
+        valueRef.current = value;
     }, [value]);
 
     const handleFocus = () => setIsFocused(true);
@@ -234,6 +266,7 @@ export const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ due_date, origin
     const formattedDate = useMemo(() => {
         if (!due_date) return 'MM/DD/YY';
         const date = new Date(due_date + 'T00:00:00');
+        if (isNaN(date.getTime())) return 'MM/DD/YY';
         const month = String(date.getMonth() + 1).padStart(2, '0');
         const day = String(date.getDate()).padStart(2, '0');
         const year = String(date.getFullYear()).slice(-2);
@@ -275,17 +308,41 @@ export const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ due_date, origin
 interface SelectInputProps { value: string; onChange: (newValue: string) => void; options: string[]; placeholder?: string; className?: string; }
 export const SelectInput: React.FC<SelectInputProps> = ({ value, onChange, options, placeholder, className }) => {
     const [isOpen, setIsOpen] = useState(false);
-    const filteredOptions = useMemo(() => options.filter(option => option.toLowerCase().includes((value || '').toLowerCase())), [options, value]);
-    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => { onChange(e.target.value); if (!isOpen) setIsOpen(true); };
-    const handleOptionClick = (option: string) => { onChange(option); setIsOpen(false); };
-    const handleBlur = (e: React.FocusEvent<HTMLDivElement>) => { if (!e.currentTarget.contains(e.relatedTarget as Node)) setIsOpen(false); };
+    const [inputValue, setInputValue] = useState(value);
+
+    useEffect(() => {
+        setInputValue(value);
+    }, [value]);
+
+    const filteredOptions = useMemo(() => options.filter(option => option.toLowerCase().includes((inputValue || '').toLowerCase())), [options, inputValue]);
+    
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => { 
+        setInputValue(e.target.value); 
+        if (!isOpen) setIsOpen(true); 
+    };
+    
+    const handleOptionClick = (option: string) => { 
+        setInputValue(option); 
+        onChange(option); 
+        setIsOpen(false); 
+    };
+    
+    const handleBlur = (e: React.FocusEvent<HTMLDivElement>) => { 
+        if (!e.currentTarget.contains(e.relatedTarget as Node)) {
+             setIsOpen(false);
+             if (inputValue !== value) {
+                onChange(inputValue);
+             }
+        }
+    };
+    
     return (
         <div className="relative w-full" onBlur={handleBlur}>
-            <input type="text" value={value} onChange={handleInputChange} onFocus={() => setIsOpen(true)} placeholder={placeholder} className={className} autoComplete="off"/>
+            <input type="text" value={inputValue} onChange={handleInputChange} onFocus={() => setIsOpen(true)} placeholder={placeholder} className={className} autoComplete="off"/>
             {isOpen && filteredOptions.length > 0 && (
                 <ul className="absolute z-10 w-full bg-white border border-gray-300 rounded-md shadow-lg mt-1 max-h-60 overflow-auto">
                     {filteredOptions.map((option) => (
-                        <li key={option} className="px-3 py-2 cursor-pointer hover:bg-indigo-50" onClick={() => handleOptionClick(option)}>{option}</li>
+                        <li key={option} className="px-3 py-2 cursor-pointer hover:bg-indigo-50" onMouseDown={() => handleOptionClick(option)}>{option}</li>
                     ))}
                 </ul>
             )}
@@ -295,8 +352,8 @@ export const SelectInput: React.FC<SelectInputProps> = ({ value, onChange, optio
 
 
 // Project Card for Manager and Client Views
-interface ProjectCardProps { project: Project; onUpdate: (id: number, field: keyof Project, value: string | number | boolean | null) => void; onDelete?: (project: Project) => void; }
-export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onDelete }) => {
+interface ProjectCardProps { project: Project; onUpdate: (id: number, field: keyof Project, value: string | number | boolean | null) => void; onDelete?: (project: Project) => void; isClientView?: boolean }
+export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onDelete, isClientView = false }) => {
     const handleUpdate = (field: keyof Project, value: any) => onUpdate(project.id, field, value);
     const renderStatusButtons = () => {
         switch (project.status) {
@@ -307,134 +364,145 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onD
         }
     }
 
+    const renderField = (value: string, field: keyof Project, options?: string[], placeholder?: string, isNote?: boolean) => {
+        if (isClientView) return <span className={`p-1 ${!value && 'text-gray-400'}`}>{value || (isNote ? '' : placeholder)}</span>
+        if (options) return <SelectInput value={value} onChange={(val) => handleUpdate(field, val)} options={options} placeholder={placeholder} className={`${INLINE_INPUT_CLASS} font-semibold text-lg`} />
+        return <input type="text" value={value} onChange={(e) => handleUpdate(field, e.target.value)} className={INLINE_INPUT_CLASS} placeholder={placeholder}/>
+    }
+
+    const renderNumberField = (value: number, field: keyof Project) => {
+      if (isClientView) return <p className="font-bold text-lg text-blue-800 text-center h-9 flex items-center justify-center">{value || 0}</p>
+      return <input type="number" step="0.01" value={value || 0} onChange={(e) => handleUpdate(field, parseFloat(e.target.value) || 0)} className={`font-bold text-lg text-blue-800 text-center h-9 ${INLINE_INPUT_CLASS}`}/>
+    }
+    
+    const cardBgClass = useMemo(() => {
+        if (project.status === 'done') return 'bg-lime-200 border border-lime-300';
+        if (project.is_on_hold) return 'bg-pink-100 border border-pink-300';
+        return 'bg-white';
+    }, [project.status, project.is_on_hold]);
+
     return (
-        <div className={`p-4 rounded-lg shadow-md flex flex-col lg:flex-row items-start gap-6 hover:shadow-lg transition-all duration-300 ${project.is_on_hold ? 'bg-pink-100 border border-pink-300' : 'bg-white'}`} data-id={project.id}>
+        <div className={`p-4 rounded-lg shadow-md flex flex-col lg:flex-row items-start gap-6 hover:shadow-lg transition-all duration-300 ${cardBgClass}`} data-id={project.id}>
             <div className="w-full lg:w-5/12 space-y-3 flex-shrink-0">
-                <input type="text" value={project.title} onChange={(e) => handleUpdate('title', e.target.value)} className="font-bold text-lg text-gray-800 w-full p-1 -m-1 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500" placeholder="Project Title"/>
-                <DueDateDisplay due_date={project.due_date} original_due_date={project.original_due_date} onUpdate={(newDate) => handleUpdate('due_date', newDate)} />
-                <RichTextInput value={project.notes} onChange={(newValue) => handleUpdate('notes', newValue)} placeholder="Notes..." />
+                {isClientView ? 
+                    <h2 className="font-bold text-lg text-gray-800 p-1">{project.title}</h2> : 
+                    <input type="text" value={project.title} onChange={(e) => handleUpdate('title', e.target.value)} className="font-bold text-lg text-gray-800 w-full p-1 -m-1 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500" placeholder="Project Title"/>
+                }
+                <DueDateDisplay due_date={project.due_date} original_due_date={project.original_due_date} onUpdate={(newDate) => handleUpdate('due_date', newDate)} isReadOnly={isClientView}/>
+                {isClientView ? 
+                   <div className="w-full p-2 border border-transparent rounded-md whitespace-pre-wrap" style={{minHeight: '6rem'}} dangerouslySetInnerHTML={{ __html: project.notes || ''}} /> : 
+                   <RichTextInput value={project.notes} onChange={(newValue) => handleUpdate('notes', newValue)} placeholder="Notes..." />
+                }
             </div>
             <div className="w-full lg:w-7/12 flex-grow">
-                <div className="flex justify-end items-center gap-2 mb-4">
-                    <button onClick={() => handleUpdate('is_on_hold', !project.is_on_hold)} className={`px-3 py-1 text-xs font-semibold rounded-md shadow-sm transition-colors whitespace-nowrap ${project.is_on_hold ? 'bg-yellow-500 text-white hover:bg-yellow-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>{project.is_on_hold ? 'On Hold' : 'Set Hold'}</button>
-                    {renderStatusButtons()}
-                    {onDelete && <button onClick={() => onDelete(project)} className="p-1.5 rounded-full text-gray-400 hover:bg-red-100 hover:text-red-600" title="Delete"><TrashIcon /></button>}
-                </div>
+                {!isClientView && (
+                    <div className="flex justify-end items-center gap-2 mb-4">
+                        <button onClick={() => handleUpdate('is_on_hold', !project.is_on_hold)} className={`px-3 py-1 text-xs font-semibold rounded-md shadow-sm transition-colors whitespace-nowrap ${project.is_on_hold ? 'bg-yellow-500 text-white hover:bg-yellow-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>{project.is_on_hold ? 'On Hold' : 'Set Hold'}</button>
+                        {renderStatusButtons()}
+                        {onDelete && <button onClick={() => onDelete(project)} className="p-1.5 rounded-full text-gray-400 hover:bg-red-100 hover:text-red-600" title="Delete"><TrashIcon /></button>}
+                    </div>
+                )}
                 <div className="flex flex-col md:flex-row md:items-start md:gap-6">
                     <div className="space-y-3 text-sm flex-grow">
-                        <div className="flex items-center gap-2"><strong className="text-gray-600 w-16 shrink-0 text-right">Editor:</strong><div className="flex-grow flex items-center gap-2"><div className="flex-1 min-w-0"><SelectInput value={project.editor} onChange={(val) => handleUpdate('editor', val)} options={editors} placeholder="Name..." className={`${INLINE_INPUT_CLASS} font-semibold text-lg`} /></div><div className="flex-1 min-w-0"><input type="text" value={project.editor_note} onChange={(e) => handleUpdate('editor_note', e.target.value)} className={INLINE_INPUT_CLASS} placeholder="Note..."/></div></div></div>
-                        <div className="flex items-center gap-2"><strong className="text-gray-600 w-16 shrink-0 text-right">Master:</strong><div className="flex-grow flex items-center gap-2"><div className="flex-1 min-w-0"><SelectInput value={project.master} onChange={(val) => handleUpdate('master', val)} options={masters} placeholder="Name..." className={`${INLINE_INPUT_CLASS} font-semibold text-lg`} /></div><div className="flex-1 min-w-0"><input type="text" value={project.master_note} onChange={(e) => handleUpdate('master_note', e.target.value)} className={INLINE_INPUT_CLASS} placeholder="Note..."/></div></div></div>
-                        <div className="flex items-center gap-2"><strong className="text-gray-600 w-16 shrink-0 text-right">PZ QC:</strong><div className="flex-grow flex items-center gap-2"><div className="flex-1 min-w-0"><SelectInput value={project.pz_qc} onChange={(val) => handleUpdate('pz_qc', val)} options={qcPersonnel} placeholder="Name..." className={`${INLINE_INPUT_CLASS} font-semibold text-lg`} /></div><div className="flex-1 min-w-0"><input type="text" value={project.pz_qc_note} onChange={(e) => handleUpdate('pz_qc_note', e.target.value)} className={INLINE_INPUT_CLASS} placeholder="Note..."/></div></div></div>
+                        <div className="flex items-center gap-2"><strong className="text-gray-600 w-16 shrink-0 text-right">Editor:</strong><div className="flex-grow flex items-center gap-2"><div className="flex-1 min-w-0">{renderField(project.editor, 'editor', editors, 'Name...')}</div><div className="flex-1 min-w-0">{renderField(project.editor_note, 'editor_note', undefined, 'Note...', true)}</div></div></div>
+                        <div className="flex items-center gap-2"><strong className="text-gray-600 w-16 shrink-0 text-right">Master:</strong><div className="flex-grow flex items-center gap-2"><div className="flex-1 min-w-0">{renderField(project.master, 'master', masters, 'Name...')}</div><div className="flex-1 min-w-0">{renderField(project.master_note, 'master_note', undefined, 'Note...', true)}</div></div></div>
+                        <div className="flex items-center gap-2"><strong className="text-gray-600 w-16 shrink-0 text-right">PZ QC:</strong><div className="flex-grow flex items-center gap-2"><div className="flex-1 min-w-0">{renderField(project.pz_qc, 'pz_qc', qcPersonnel, 'Name...')}</div><div className="flex-1 min-w-0">{renderField(project.pz_qc_note, 'pz_qc_note', undefined, 'Note...', true)}</div></div></div>
                     </div>
                     <div className="flex flex-row flex-wrap justify-start gap-2 pt-4 md:pt-0 flex-shrink-0">
-                        <div className="bg-blue-50 p-2 rounded-lg w-24 text-center"><input type="number" step="0.01" value={project.est_rt || 0} onChange={(e) => handleUpdate('est_rt', parseFloat(e.target.value) || 0)} className={`font-bold text-lg text-blue-800 text-center h-9 ${INLINE_INPUT_CLASS}`}/><p className="text-xs text-blue-600 mt-1">EST RT</p></div>
-                        <div className="bg-yellow-50 p-2 rounded-lg w-24 text-center"><input type="number" step="0.01" value={project.total_edited || 0} onChange={(e) => handleUpdate('total_edited', parseFloat(e.target.value) || 0)} className={`font-bold text-lg text-yellow-800 text-center h-9 ${INLINE_INPUT_CLASS}`}/><p className="text-xs text-yellow-600 mt-1">Edited</p></div>
-                        <div className="bg-green-50 p-2 rounded-lg w-24 text-center"><input type="text" readOnly value={calculateWhatsLeft(project.est_rt, project.total_edited)} className={`font-bold text-lg text-green-800 text-center h-9 bg-transparent w-full p-1 -m-1 rounded outline-none`}/><p className="text-xs text-green-600 mt-1">What's Left</p></div>
-                        <div className="bg-purple-50 p-2 rounded-lg w-24 text-center"><input type="number" step="0.01" value={project.remaining_raw || 0} onChange={(e) => handleUpdate('remaining_raw', parseFloat(e.target.value) || 0)} className={`font-bold text-lg text-purple-800 text-center h-9 ${INLINE_INPUT_CLASS}`}/><p className="text-xs text-purple-600 mt-1">Remaining RAW</p></div>
-                    </div>
-                </div>
-            </div>
-        </div>
-    );
-};
-
-
-// Manager View Component
-interface ManagerViewProps { projects: Project[]; onUpdate: (id: number, field: keyof Project, value: string | number | boolean | null) => void; onDelete: (project: Project) => void; }
-export const ManagerView: React.FC<ManagerViewProps> = ({ projects, onUpdate, onDelete }) => (
-    <div className="space-y-4">
-        {projects.length > 0 ? projects.map(project => <ProjectCard key={project.id} project={project} onUpdate={onUpdate} onDelete={onDelete} />) : (
-            <div className="text-center py-12 bg-white rounded-lg shadow-md">
-                <h3 className="text-xl font-semibold text-gray-700">No projects to display.</h3>
-                <p className="text-gray-500 mt-2">Try adding a new project or changing the page view.</p>
-            </div>
-        )}
-    </div>
-);
-
-// Client View Component
-interface ClientViewProps { projects: Project[]; onUpdate: (id: number, field: keyof Project, value: string | number | boolean | null) => void; }
-export const ClientView: React.FC<ClientViewProps> = ({ projects, onUpdate }) => {
-    const groupedProjects = useMemo(() => {
-        const groups = projects.reduce((acc, project) => {
-            const client = getClientName(project);
-            if (!acc[client]) acc[client] = [];
-            acc[client].push(project);
-            return acc;
-        }, {} as Record<string, Project[]>);
-        for (const clientName in groups) {
-            groups[clientName].sort((a, b) => {
-                if (!a.due_date) return 1;
-                if (!b.due_date) return -1;
-                return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
-            });
-        }
-        return groups;
-    }, [projects]);
-    const clientOrder = useMemo(() => Object.keys(groupedProjects).sort((a, b) => a === 'PRH' ? -1 : b === 'PRH' ? 1 : a.localeCompare(b)), [groupedProjects]);
-    return (
-        <div className="space-y-8">
-            {clientOrder.length > 0 ? clientOrder.map(clientName => (
-                <div key={clientName}>
-                    <h2 className="text-2xl font-bold mb-4 pb-2 border-b-2 border-indigo-200 text-gray-800">{clientName}</h2>
-                    <div className="space-y-4">
-                        {groupedProjects[clientName].map(project => <ProjectCard key={project.id} project={project} onUpdate={onUpdate} />)}
-                    </div>
-                </div>
-            )) : (
-                 <div className="text-center py-12 bg-white rounded-lg shadow-md">
-                    <h3 className="text-xl font-semibold text-gray-700">No projects to display.</h3>
-                    <p className="text-gray-500 mt-2">Try adding a new project or changing the page view.</p>
-                </div>
-            )}
-        </div>
-    );
-};
-
-
-// Editor Row for Editor View
-interface EditorRowProps { project: Project; onUpdate: (id: number, field: keyof Project, value: string | number | boolean) => void; }
-export const EditorRow: React.FC<EditorRowProps> = ({ project, onUpdate }) => {
-    const handleInputChange = (field: keyof Project, value: string) => onUpdate(project.id, field, parseFloat(value) || 0);
-    return (
-        <div className={`grid grid-cols-2 md:grid-cols-7 gap-4 items-center p-3 border-b border-gray-200 ${project.is_on_hold ? 'bg-pink-50' : ''}`}>
-            <div className="col-span-2 md:col-span-3">
-                <input type="text" value={project.title} readOnly className={`font-semibold text-gray-800 bg-gray-50 w-full p-1 -m-1 rounded`} />
-                <div className="flex flex-wrap items-center text-sm text-gray-500 mt-1 gap-x-2">
-                    <DueDateDisplay due_date={project.due_date} original_due_date={project.original_due_date} onUpdate={() => {}} isReadOnly={true} />
-                    <span className="hidden sm:inline">|</span>
-                    <span className="flex items-center">
-                        Editor:
-                        <div className="w-24 ml-1"><SelectInput value={project.editor} onChange={(val) => onUpdate(project.id, 'editor', val)} options={editors} placeholder="Name" className={INLINE_INPUT_CLASS} /></div>
-                        <input type="text" value={project.editor_note} onChange={(e) => onUpdate(project.id, 'editor_note', e.target.value)} className={`${INLINE_INPUT_CLASS} flex-grow ml-1`} placeholder="Note..."/>
-                    </span>
-                </div>
-            </div>
-            <div className="text-center"><label className="text-xs text-gray-500 block mb-1">EST RT</label><input type="number" step="0.01" value={project.est_rt} readOnly className="w-full border-gray-300 rounded-md shadow-sm text-center p-1 bg-gray-50"/></div>
-            <div><label className="text-xs text-gray-500 block mb-1">Total Edited</label><input type="number" step="0.01" value={project.total_edited} onChange={(e) => handleInputChange('total_edited', e.target.value)} className="font-bold text-lg w-full border-gray-300 rounded-md shadow-sm text-center p-1"/></div>
-            <div className="text-center bg-gray-50 p-2 rounded-lg"><p className="font-medium">{calculateWhatsLeft(project.est_rt, project.total_edited)}</p><p className="text-xs text-gray-500">What's Left</p></div>
-            <div><label className="text-xs text-gray-500 block mb-1">Remaining RAW</label><input type="number" step="0.01" value={project.remaining_raw} onChange={(e) => handleInputChange('remaining_raw', e.target.value)} className="font-bold text-lg w-full border-gray-300 rounded-md shadow-sm text-center p-1"/></div>
-        </div>
-    );
-};
-
-
-// Editor View Component
-interface EditorViewProps { projects: Project[]; onUpdate: (id: number, field: keyof Project, value: string | number | boolean) => void; }
-export const EditorView: React.FC<EditorViewProps> = ({ projects, onUpdate }) => {
-    return (
-        <div>
-            <div className="bg-white p-4 sm:p-6 rounded-lg shadow-md">
-                <h2 className="text-2xl font-bold mb-4 text-gray-900">Editor Entries</h2>
-                <div className="space-y-2">
-                     {projects.length > 0 ? projects.map(project => <EditorRow key={project.id} project={project} onUpdate={onUpdate} />) : (
-                         <div className="text-center py-10">
-                            <h3 className="text-lg font-semibold text-gray-600">No ongoing projects.</h3>
-                            <p className="text-gray-500 mt-1">All active edits are complete.</p>
+                        <div className="bg-blue-50 p-2 rounded-lg w-24 text-center">
+                            {renderNumberField(project.est_rt, 'est_rt')}
+                            <p className="text-xs text-blue-600 mt-1">EST RT</p>
                         </div>
-                    )}
+                        <div className="bg-yellow-50 p-2 rounded-lg w-24 text-center">
+                            {isClientView ? <p className="font-bold text-lg text-yellow-800 text-center h-9 flex items-center justify-center">{project.total_edited || 0}</p> : <input type="number" step="0.01" value={project.total_edited || 0} onChange={(e) => handleUpdate('total_edited', parseFloat(e.target.value) || 0)} className={`font-bold text-lg text-yellow-800 text-center h-9 ${INLINE_INPUT_CLASS}`}/>}
+                            <p className="text-xs text-yellow-600 mt-1">Edited</p>
+                        </div>
+                        <div className="bg-green-50 p-2 rounded-lg w-24 text-center">
+                            <p className="font-bold text-lg text-green-800 h-9 flex items-center justify-center">{calculateWhatsLeft(project.est_rt, project.total_edited)}</p>
+                            <p className="text-xs text-green-600 mt-1">What's Left</p>
+                        </div>
+                        <div className="bg-purple-50 p-2 rounded-lg w-24 text-center">
+                            {isClientView ? <p className="font-bold text-lg text-purple-800 text-center h-9 flex items-center justify-center">{project.remaining_raw || 0}</p> : <input type="number" step="0.01" value={project.remaining_raw || 0} onChange={(e) => handleUpdate('remaining_raw', parseFloat(e.target.value) || 0)} className={`font-bold text-lg text-purple-800 text-center h-9 ${INLINE_INPUT_CLASS}`}/>}
+                            <p className="text-xs text-purple-600 mt-1">Remaining RAW</p>
+                        </div>
+                    </div>
                 </div>
             </div>
+        </div>
+    );
+};
+
+// --- VIEW COMPONENTS ---
+
+interface ViewProps {
+    projects: Project[];
+    onUpdate: (id: number, field: keyof Project, value: any) => void;
+    onDelete?: (project: Project) => void;
+}
+
+export const ManagerView: React.FC<ViewProps> = ({ projects, onUpdate, onDelete }) => {
+    if (projects.length === 0) return <div className="text-center text-gray-500 py-10">No projects to display in this category.</div>;
+    return (
+        <div className="space-y-4">
+            {projects.map(project => (
+                <ProjectCard key={project.id} project={project} onUpdate={onUpdate} onDelete={onDelete} isClientView={false} />
+            ))}
+        </div>
+    );
+};
+
+export const ClientView: React.FC<Omit<ViewProps, 'onDelete'>> = ({ projects, onUpdate }) => {
+    if (projects.length === 0) return <div className="text-center text-gray-500 py-10">No projects to display in this category.</div>;
+    return (
+        <div className="space-y-4">
+            {projects.map(project => (
+                 <ProjectCard key={project.id} project={project} onUpdate={onUpdate} isClientView={true} />
+            ))}
+        </div>
+    );
+};
+
+export const EditorView: React.FC<Omit<ViewProps, 'onDelete'>> = ({ projects, onUpdate }) => {
+    const handleUpdate = (id: number, field: keyof Project, value: any) => onUpdate(id, field, value);
+
+    if (projects.length === 0) return <div className="text-center text-gray-500 py-10">No ongoing projects assigned.</div>;
+    
+    return (
+        <div className="bg-white rounded-lg shadow-md overflow-x-auto">
+            <table className="w-full text-sm text-left text-gray-500">
+                <thead className="text-xs text-gray-700 uppercase bg-gray-50">
+                    <tr>
+                        <th scope="col" className="px-6 py-3">Client</th>
+                        <th scope="col" className="px-6 py-3">Title</th>
+                        <th scope="col" className="px-6 py-3">Due Date</th>
+                        <th scope="col" className="px-6 py-3">Editor</th>
+                        <th scope="col" className="px-6 py-3">EST RT</th>
+                        <th scope="col" className="px-6 py-3">Total Edited</th>
+                        <th scope="col" className="px-6 py-3">Remaining Raw</th>
+                        <th scope="col" className="px-6 py-3">What's Left</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {projects.map((project) => (
+                        <tr key={project.id} className="bg-white border-b hover:bg-gray-50">
+                            <td className="px-6 py-4 font-semibold text-gray-900">{getClientName(project)}</td>
+                            <td className="px-6 py-4">{project.title}</td>
+                            <td className="px-6 py-4">
+                               <DueDateDisplay due_date={project.due_date} original_due_date={project.original_due_date} onUpdate={(newDate) => handleUpdate(project.id, 'due_date', newDate)} isReadOnly={true} />
+                            </td>
+                            <td className="px-6 py-4 font-semibold">{project.editor}</td>
+                            <td className="px-6 py-4">{project.est_rt}</td>
+                            <td className="px-6 py-4 w-32">
+                               <input type="number" step="0.01" value={project.total_edited || ''} onChange={(e) => handleUpdate(project.id, 'total_edited', parseFloat(e.target.value))} className="w-full p-1 rounded border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"/>
+                            </td>
+                            <td className="px-6 py-4 w-32">
+                               <input type="number" step="0.01" value={project.remaining_raw || ''} onChange={(e) => handleUpdate(project.id, 'remaining_raw', parseFloat(e.target.value))} className="w-full p-1 rounded border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"/>
+                            </td>
+                            <td className="px-6 py-4 font-semibold">{calculateWhatsLeft(project.est_rt, project.total_edited)}</td>
+                        </tr>
+                    ))}
+                </tbody>
+            </table>
         </div>
     );
 };

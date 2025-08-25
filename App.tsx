@@ -8,8 +8,11 @@ import {
     EditorView,
     DeleteConfirmationModal,
     PlusIcon,
-    DailyNotesWidget
+    DailyNotesWidget,
+    MemoIcon
 } from './components';
+import { getClientName } from './utils';
+import { ProjectCard } from './components';
 
 // --- CHILD COMPONENTS (Now receive state and handlers via props) ---
 
@@ -51,49 +54,58 @@ const ManagerDashboard: React.FC<{
     onNotesChange: (newContent: string) => void;
 }> = ({ projects, dailyNotesContent, onAddProject, onUpdateProject, onNotesChange }) => {
     const [viewMode, setViewMode] = useState<ViewMode>('manager');
-    const [currentPage, setCurrentPage] = useState<'ongoing' | 'done' | 'archived' | 'editorView'>('ongoing');
+    const [currentPage, setCurrentPage] = useState<'ongoing' | 'done' | 'all-active' | 'archived' | 'editorView'>('ongoing');
     const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
-    const [sortByDate, setSortByDate] = useState(false);
-
-    // Reset sort when changing tabs for a consistent experience
-    useEffect(() => {
-        setSortByDate(false);
-    }, [currentPage]);
+    const [isNotesVisible, setIsNotesVisible] = useState(false);
+    const [sortBy, setSortBy] = useState<'default' | 'date'>('default');
     
     // --- DERIVE STATE DIRECTLY FROM PROPS ON EVERY RENDER ---
-    // This fixes the stale state bug by removing useMemo.
-    
-    const ongoingProjects = (() => {
-        const filtered = projects.filter(p => p.status === 'ongoing');
+    const ongoingProjects = useMemo(() => projects.filter(p => p.status === 'ongoing'), [projects]);
+    const doneProjects = useMemo(() => projects.filter(p => p.status === 'done'), [projects]);
+    const archivedProjects = useMemo(() => projects.filter(p => p.status === 'archived'), [projects]);
+
+    const getGroupedAndSortedProjects = useMemo(() => {
+        const CLIENT_ORDER = ['PRH', 'ANATOLE', 'AUDIBLE', 'HAY HOUSE', 'ONS', 'PODIUM', 'CURATED AUDIO', 'Bloomsbury'];
         
-        if (sortByDate && currentPage === 'ongoing') {
-            return filtered.sort((a, b) => {
-                if (!a.due_date) return 1;
-                if (!b.due_date) return -1;
-                return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+        return (projectsToProcess: Project[]) => {
+            if (!projectsToProcess || projectsToProcess.length === 0) {
+                return { groupedProjects: {}, sortedClients: [] };
+            }
+
+            const groupedProjects = projectsToProcess.reduce((acc, project) => {
+                const clientName = getClientName(project);
+                if (!acc[clientName]) acc[clientName] = [];
+                acc[clientName].push(project);
+                return acc;
+            }, {} as Record<string, Project[]>);
+
+            Object.values(groupedProjects).forEach(group => {
+                group.sort((a, b) => {
+                    if (!a.due_date) return 1;
+                    if (!b.due_date) return -1;
+                    return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+                });
             });
-        }
-        
-        // Default sort: unassigned first, then by due date
-        return filtered.sort((a, b) => {
-            const isAUnassigned = !a.editor && !a.master && !a.pz_qc;
-            const isBUnassigned = !b.editor && !b.master && !b.pz_qc;
 
-            if (isAUnassigned && !isBUnassigned) return -1;
-            if (!isAUnassigned && isBUnassigned) return 1;
-
-            if (!a.due_date) return 1;
-            if (!b.due_date) return -1;
-            return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
-        });
-    })();
-
-    const doneProjects = projects.filter(p => p.status === 'done');
-    const archivedProjects = projects.filter(p => p.status === 'archived');
-    
-    const handleSortByDate = useCallback(() => {
-        setSortByDate(prev => !prev);
+            const sortedClients = Object.keys(groupedProjects).sort((a, b) => {
+                const indexA = CLIENT_ORDER.indexOf(a);
+                const indexB = CLIENT_ORDER.indexOf(b);
+                if (indexA !== -1 && indexB !== -1) return indexA - indexB;
+                if (indexA !== -1) return -1;
+                if (indexB !== -1) return 1;
+                return a.localeCompare(b);
+            });
+            
+            return { groupedProjects, sortedClients };
+        };
     }, []);
+
+    // Reset sort when user navigates away from the manager ongoing view
+    useEffect(() => {
+        if (currentPage !== 'ongoing' || viewMode !== 'manager') {
+            setSortBy('default');
+        }
+    }, [currentPage, viewMode]);
 
     const handleOpenDeleteModal = useCallback((project: Project) => setProjectToDelete(project), []);
     const handleCloseDeleteModal = useCallback(() => setProjectToDelete(null), []);
@@ -105,21 +117,103 @@ const ManagerDashboard: React.FC<{
     }, [projectToDelete, onUpdateProject]);
 
     const renderCurrentView = () => {
+        // Editor View is separate
         if (currentPage === 'editorView') {
-            return <EditorView projects={ongoingProjects} onUpdate={onUpdateProject} />;
+            const sortedProjects = [...ongoingProjects].sort((a,b) => {
+                if (!a.due_date) return 1;
+                if (!b.due_date) return -1;
+                return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+            });
+            return <EditorView projects={sortedProjects} onUpdate={onUpdateProject} />;
         }
 
-        let projectsForPage: Project[];
-        switch(currentPage) {
-            case 'ongoing': projectsForPage = ongoingProjects; break;
-            case 'done': projectsForPage = doneProjects; break;
-            case 'archived': projectsForPage = archivedProjects; break;
-            default: projectsForPage = [];
+        // Client View is always grouped and shows ongoing projects
+        if (viewMode === 'client') {
+            const { groupedProjects, sortedClients } = getGroupedAndSortedProjects(ongoingProjects);
+
+            if (sortedClients.length === 0) {
+                return <div className="text-center text-gray-500 py-10">No projects to display in this category.</div>;
+            }
+
+            return (
+                <div className="space-y-8">
+                    {sortedClients.map(clientName => (
+                        <div key={clientName}>
+                            <h2 className="text-2xl font-bold text-gray-800 mb-4 border-b pb-2">{clientName}</h2>
+                            <div className="space-y-4">
+                                {groupedProjects[clientName].map(project => (
+                                    <ProjectCard
+                                        key={project.id}
+                                        project={project}
+                                        onUpdate={onUpdateProject}
+                                        isClientView={true}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            );
+        }
+
+        // New All Active view (Manager only)
+        if (currentPage === 'all-active') {
+            const projectsToDisplay = projects.filter(p => p.status === 'ongoing' || p.status === 'done');
+            const { groupedProjects, sortedClients } = getGroupedAndSortedProjects(projectsToDisplay);
+
+            if (sortedClients.length === 0) {
+                return <div className="text-center text-gray-500 py-10">No active projects to display.</div>;
+            }
+
+            return (
+                <div className="space-y-8">
+                    {sortedClients.map(clientName => (
+                        <div key={clientName}>
+                            <h2 className="text-2xl font-bold text-gray-800 mb-4 border-b pb-2">{clientName}</h2>
+                            <div className="space-y-4">
+                                {groupedProjects[clientName].map(project => (
+                                    <ProjectCard
+                                        key={project.id}
+                                        project={project}
+                                        onUpdate={onUpdateProject}
+                                        onDelete={handleOpenDeleteModal}
+                                        isClientView={false}
+                                    />
+                                ))}
+                            </div>
+                        </div>
+                    ))}
+                </div>
+            );
         }
         
-        return viewMode === 'manager'
-            ? <ManagerView projects={projectsForPage} onUpdate={onUpdateProject} onDelete={handleOpenDeleteModal} />
-            : <ClientView projects={projectsForPage} onUpdate={onUpdateProject} />;
+        // Manager View logic
+        let projectsForView: Project[];
+
+        if (currentPage === 'ongoing') {
+            if (sortBy === 'date') {
+                projectsForView = [...ongoingProjects].sort((a, b) => {
+                    if (!a.due_date) return 1;
+                    if (!b.due_date) return -1;
+                    return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+                });
+            } else { // default sort: unassigned first, then newest first
+                projectsForView = [...ongoingProjects].sort((a, b) => {
+                    const aUnassigned = !a.editor || !a.master || !a.pz_qc;
+                    const bUnassigned = !b.editor || !b.master || !b.pz_qc;
+                    if (aUnassigned !== bUnassigned) {
+                        return aUnassigned ? -1 : 1;
+                    }
+                    return new Date(b.created_at).getTime() - new Date(a.created_at).getTime();
+                });
+            }
+        } else if (currentPage === 'done') {
+            projectsForView = doneProjects;
+        } else { // archived
+            projectsForView = archivedProjects;
+        }
+
+        return <ManagerView projects={projectsForView} onUpdate={onUpdateProject} onDelete={handleOpenDeleteModal} />;
     };
 
     return (
@@ -133,10 +227,16 @@ const ManagerDashboard: React.FC<{
                         </div>
                         <div className="flex items-center space-x-4">
                             {viewMode === 'manager' && (
-                                <button onClick={() => { onAddProject(); setCurrentPage('ongoing'); }} className="px-4 py-2 bg-indigo-600 text-white rounded-lg shadow hover:bg-indigo-700 transition-transform duration-150 ease-in-out active:scale-95 active:bg-indigo-800 flex items-center">
-                                    <PlusIcon />
-                                    <span className="hidden sm:inline">Add Project</span>
-                                </button>
+                                <>
+                                    <button onClick={() => setIsNotesVisible(true)} className="px-4 py-2 bg-white border border-gray-300 text-gray-700 rounded-lg shadow-sm hover:bg-gray-50 transition-transform duration-150 ease-in-out active:scale-95 flex items-center">
+                                        <MemoIcon />
+                                        <span className="hidden sm:inline">Daily Notes</span>
+                                    </button>
+                                    <button onClick={() => { onAddProject(); setCurrentPage('ongoing'); }} className="px-4 py-2 bg-indigo-600 text-white rounded-lg shadow hover:bg-indigo-700 transition-transform duration-150 ease-in-out active:scale-95 active:bg-indigo-800 flex items-center">
+                                        <PlusIcon />
+                                        <span className="hidden sm:inline">Add Project</span>
+                                    </button>
+                                </>
                             )}
                         </div>
                     </header>
@@ -147,14 +247,26 @@ const ManagerDashboard: React.FC<{
                                 <div className="flex items-center space-x-2 bg-gray-100 p-1 rounded-lg">
                                     <button onClick={() => setCurrentPage('ongoing')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${currentPage === 'ongoing' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>Ongoing Edits</button>
                                     <button onClick={() => setCurrentPage('done')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${currentPage === 'done' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>Edit Done</button>
+                                    <button onClick={() => setCurrentPage('all-active')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${currentPage === 'all-active' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>All Active</button>
                                     <button onClick={() => setCurrentPage('archived')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${currentPage === 'archived' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>Archived Projects</button>
                                     <button onClick={() => setCurrentPage('editorView')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${currentPage === 'editorView' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>Editor View</button>
                                 </div>
-                                {viewMode === 'manager' && currentPage === 'ongoing' && (
-                                    <button onClick={handleSortByDate} className="px-4 py-2 rounded-lg text-sm font-semibold transition-colors bg-gray-200 text-gray-700 hover:bg-gray-300 shadow-sm">
-                                        {sortByDate ? 'Default Sort' : 'Sort by Date'}
-                                    </button>
-                                 )}
+                                {currentPage === 'ongoing' && viewMode === 'manager' && (
+                                    <div className="flex items-center gap-2">
+                                        <button 
+                                            onClick={() => setSortBy('date')} 
+                                            className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors ${sortBy === 'date' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                                        >
+                                            Sort by Date
+                                        </button>
+                                        <button 
+                                            onClick={() => setSortBy('default')} 
+                                            className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors ${sortBy === 'default' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                                        >
+                                            Reset Sort
+                                        </button>
+                                    </div>
+                                )}
                             </div>
         
                             <div className="flex items-center gap-4 sm:ml-auto">
@@ -170,11 +282,18 @@ const ManagerDashboard: React.FC<{
             </div>
 
             <main className="container mx-auto px-4 md:px-8 py-8">
-                 {viewMode === 'manager' && <DailyNotesWidget content={dailyNotesContent} onContentChange={onNotesChange} />}
                  <div className="mt-8">
                     {renderCurrentView()}
                  </div>
             </main>
+
+            {isNotesVisible && viewMode === 'manager' && (
+                <DailyNotesWidget
+                    content={dailyNotesContent}
+                    onContentChange={onNotesChange}
+                    onClose={() => setIsNotesVisible(false)}
+                />
+            )}
 
             {projectToDelete && (
                 <DeleteConfirmationModal
@@ -261,7 +380,7 @@ const App: React.FC = () => {
         const tempId = -Date.now();
         const tempProject: Project = {
             id: tempId, created_at: new Date().toISOString(), title: 'New Project - Click to Edit Title',
-            due_date: new Date().toISOString().split('T')[0], original_due_date: new Date().toISOString().split('T')[0],
+            due_date: null, original_due_date: null,
             notes: '', editor: '', editor_note: '', pz_qc: '', pz_qc_note: '', master: '', master_note: '',
             est_rt: 0, total_edited: 0, remaining_raw: 0, is_on_hold: false, status: 'ongoing' as const,
         };
