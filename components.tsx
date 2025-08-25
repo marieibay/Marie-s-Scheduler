@@ -478,13 +478,13 @@ export const EditorView: React.FC<Omit<ViewProps, 'onDelete'>> = ({ projects, on
                         <th scope="col" className="px-6 py-3">Editor</th>
                         <th scope="col" className="px-6 py-3">EST RT</th>
                         <th scope="col" className="px-6 py-3">Total Edited</th>
-                        <th scope="col" className="px-6 py-3">Remaining Raw</th>
                         <th scope="col" className="px-6 py-3">What's Left</th>
+                        <th scope="col" className="px-6 py-3">Remaining Raw</th>
                     </tr>
                 </thead>
                 <tbody>
                     {projects.map((project) => (
-                        <tr key={project.id} className="bg-white border-b hover:bg-gray-50">
+                        <tr key={project.id} className={`border-b hover:bg-gray-50 ${project.is_on_hold ? 'bg-pink-100' : 'bg-white'}`}>
                             <td className="px-6 py-4 font-semibold text-gray-900">{getClientName(project)}</td>
                             <td className="px-6 py-4">{project.title}</td>
                             <td className="px-6 py-4">
@@ -495,10 +495,10 @@ export const EditorView: React.FC<Omit<ViewProps, 'onDelete'>> = ({ projects, on
                             <td className="px-6 py-4 w-32">
                                <input type="number" step="0.01" value={project.total_edited || ''} onChange={(e) => handleUpdate(project.id, 'total_edited', parseFloat(e.target.value))} className="w-full p-1 rounded border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"/>
                             </td>
+                            <td className="px-6 py-4 font-semibold">{calculateWhatsLeft(project.est_rt, project.total_edited)}</td>
                             <td className="px-6 py-4 w-32">
                                <input type="number" step="0.01" value={project.remaining_raw || ''} onChange={(e) => handleUpdate(project.id, 'remaining_raw', parseFloat(e.target.value))} className="w-full p-1 rounded border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"/>
                             </td>
-                            <td className="px-6 py-4 font-semibold">{calculateWhatsLeft(project.est_rt, project.total_edited)}</td>
                         </tr>
                     ))}
                 </tbody>
