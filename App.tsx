@@ -418,33 +418,34 @@ const App: React.FC = () => {
         };
         setProjects(currentProjects => [tempProject, ...currentProjects]);
 
+        // Destructure to prepare for insert
         const { id, created_at, ...newProjectDataWithoutMeta } = tempProject;
-        const newProjectData: Partial<Project> = { ...newProjectDataWithoutMeta };
+        const newProjectData = { ...newProjectDataWithoutMeta };
 
-        // If we know the column is missing, don't try to insert it.
-        if (newEditFailureDetected.current) {
-            delete newProjectData.is_new_edit;
+        // If the feature column is missing, remove the property from the object we send to the database.
+        // This makes the insert operation succeed regardless of the database schema.
+        if (isNewEditColumnMissing) {
+            delete (newProjectData as Partial<Project>).is_new_edit;
         }
 
         const { data: newProjectFromDb, error } = await supabase.from('projects').insert(newProjectData).select().single();
+        
         if (error) {
             setProjects(currentProjects => currentProjects.filter(p => p.id !== tempId));
+            console.error("Error creating project:", error);
+            const errorMessage = (error && typeof error.message === 'string') ? error.message : JSON.stringify(error);
+            alert(`Failed to add project: ${errorMessage}`);
             
-            if (error.message.includes("Could not find the 'is_new_edit' column")) {
-                alert("Failed to create project. This feature requires a database change. Please add a boolean column named 'is_new_edit' to your 'projects' table in Supabase.");
-                if (!newEditFailureDetected.current) {
-                    newEditFailureDetected.current = true;
-                    setIsNewEditColumnMissing(true);
-                }
-            } else {
-                console.error("Error creating project:", error);
-                alert(`Failed to add project: ${error.message}`);
+            // As a fallback, if we somehow still get this error, update the state.
+            if (errorMessage.includes("Could not find the 'is_new_edit' column") && !isNewEditColumnMissing) {
+                 setIsNewEditColumnMissing(true);
+                 newEditFailureDetected.current = true;
             }
         } else if (newProjectFromDb) {
             const newProject = { ...newProjectFromDb, is_new_edit: newProjectFromDb.is_new_edit || false } as Project;
             setProjects(currentProjects => currentProjects.map(p => p.id === tempId ? newProject : p));
         }
-    }, []);
+    }, [isNewEditColumnMissing]);
 
     const handleUpdateProjectField = useCallback(async (id: number, field: keyof Project, value: any) => {
         if (field === 'is_new_edit' && (isNewEditColumnMissing || newEditFailureDetected.current)) {
@@ -472,7 +473,8 @@ const App: React.FC = () => {
             : await supabase.from('projects').update({ [field]: value }).eq('id', id);
 
         if (error) {
-            console.error(`Failed to ${isDelete ? 'delete' : 'update'} project:`, error.message);
+            const errorMessage = (error && typeof error.message === 'string') ? error.message : JSON.stringify(error);
+            console.error(`Failed to ${isDelete ? 'delete' : 'update'} project:`, errorMessage);
 
             if (isDelete) {
                 setProjects(currentProjects => {
@@ -485,14 +487,14 @@ const App: React.FC = () => {
                 ));
             }
             
-            if (error.message.includes("Could not find the 'is_new_edit' column")) {
+            if (errorMessage.includes("Could not find the 'is_new_edit' column")) {
                 console.error("Feature 'New Edit' is unavailable. Please add a boolean column named 'is_new_edit' to your 'projects' table in Supabase.");
                 if (!newEditFailureDetected.current) {
                     newEditFailureDetected.current = true;
                     setIsNewEditColumnMissing(true);
                 }
             } else {
-                alert(`Failed to update project: ${error.message}.`);
+                alert(`Failed to update project: ${errorMessage}.`);
             }
         }
     }, [projects, isNewEditColumnMissing]);
