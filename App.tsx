@@ -1,5 +1,5 @@
 
-import React, { useState, useCallback, useMemo, useEffect } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Project, ViewMode } from './types';
 import { supabase } from './supabaseClient';
 import { 
@@ -52,7 +52,9 @@ const ManagerDashboard: React.FC<{
     onAddProject: () => void;
     onUpdateProject: (id: number, field: keyof Project, value: string | number | boolean | null) => void;
     onNotesChange: (newContent: string) => void;
-}> = ({ projects, dailyNotesContent, onAddProject, onUpdateProject, onNotesChange }) => {
+    isNewEditColumnMissing: boolean;
+    isLoading: boolean;
+}> = ({ projects, dailyNotesContent, onAddProject, onUpdateProject, onNotesChange, isNewEditColumnMissing, isLoading }) => {
     const [viewMode, setViewMode] = useState<ViewMode>('manager');
     const [currentPage, setCurrentPage] = useState<'ongoing' | 'done' | 'all-active' | 'archived' | 'editorView'>('ongoing');
     const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
@@ -178,6 +180,7 @@ const ManagerDashboard: React.FC<{
                                         onUpdate={onUpdateProject}
                                         onDelete={handleOpenDeleteModal}
                                         isClientView={false}
+                                        isNewEditColumnMissing={isNewEditColumnMissing}
                                     />
                                 ))}
                             </div>
@@ -213,7 +216,7 @@ const ManagerDashboard: React.FC<{
             projectsForView = archivedProjects;
         }
 
-        return <ManagerView projects={projectsForView} onUpdate={onUpdateProject} onDelete={handleOpenDeleteModal} />;
+        return <ManagerView projects={projectsForView} onUpdate={onUpdateProject} onDelete={handleOpenDeleteModal} isNewEditColumnMissing={isNewEditColumnMissing} />;
     };
 
     return (
@@ -232,7 +235,11 @@ const ManagerDashboard: React.FC<{
                                         <MemoIcon />
                                         <span className="hidden sm:inline">Daily Notes</span>
                                     </button>
-                                    <button onClick={() => { onAddProject(); setCurrentPage('ongoing'); }} className="px-4 py-2 bg-indigo-600 text-white rounded-lg shadow hover:bg-indigo-700 transition-transform duration-150 ease-in-out active:scale-95 active:bg-indigo-800 flex items-center">
+                                    <button 
+                                        onClick={() => { onAddProject(); setCurrentPage('ongoing'); }} 
+                                        className="px-4 py-2 bg-indigo-600 text-white rounded-lg shadow hover:bg-indigo-700 transition-transform duration-150 ease-in-out active:scale-95 active:bg-indigo-800 flex items-center disabled:bg-indigo-400 disabled:cursor-not-allowed"
+                                        disabled={isLoading}
+                                    >
                                         <PlusIcon />
                                         <span className="hidden sm:inline">Add Project</span>
                                     </button>
@@ -311,9 +318,24 @@ const App: React.FC = () => {
     const [projects, setProjects] = useState<Project[]>([]);
     const [dailyNotesContent, setDailyNotesContent] = useState('');
     const [route, setRoute] = useState(window.location.pathname);
+    const [isNewEditColumnMissing, setIsNewEditColumnMissing] = useState(false);
+    const newEditFailureDetected = useRef(false);
+    const [isLoading, setIsLoading] = useState(true);
 
     // --- CENTRALIZED DATA FETCHING & REAL-TIME SUBSCRIPTION ---
     useEffect(() => {
+        // Proactively check for the existence of the 'is_new_edit' column on startup.
+        const probeForNewEditColumn = async () => {
+            if (newEditFailureDetected.current) return;
+            // This query will fail if the column doesn't exist, allowing us to disable the feature early.
+            const { error } = await supabase.from('projects').select('is_new_edit').limit(1);
+            if (error && error.message.includes("Could not find the 'is_new_edit' column")) {
+                console.warn("Feature 'New Edit' is unavailable. Proactively disabling.");
+                newEditFailureDetected.current = true;
+                setIsNewEditColumnMissing(true);
+            }
+        };
+
         // Fetch projects
         const fetchProjects = async () => {
             const { data, error } = await supabase.from('projects').select('*');
@@ -323,7 +345,6 @@ const App: React.FC = () => {
                 setProjects(augmentedData as Project[]);
             }
         };
-        fetchProjects();
 
         // Fetch daily notes
         const fetchNotes = async () => {
@@ -331,7 +352,15 @@ const App: React.FC = () => {
             if (error) console.error('Error fetching notes:', error.message);
             else setDailyNotesContent(data?.content || '');
         };
-        fetchNotes();
+        
+        // Run all startup tasks, ensuring the feature probe happens first.
+        const startup = async () => {
+            await probeForNewEditColumn();
+            await Promise.all([fetchProjects(), fetchNotes()]);
+            setIsLoading(false);
+        };
+        
+        startup();
 
         // Subscribe to project changes
         const projectsChannel = supabase.channel('projects')
@@ -389,7 +418,13 @@ const App: React.FC = () => {
         };
         setProjects(currentProjects => [tempProject, ...currentProjects]);
 
-        const { id, created_at, ...newProjectData } = tempProject;
+        const { id, created_at, ...newProjectDataWithoutMeta } = tempProject;
+        const newProjectData: Partial<Project> = { ...newProjectDataWithoutMeta };
+
+        // If we know the column is missing, don't try to insert it.
+        if (newEditFailureDetected.current) {
+            delete newProjectData.is_new_edit;
+        }
 
         const { data: newProjectFromDb, error } = await supabase.from('projects').insert(newProjectData).select().single();
         if (error) {
@@ -397,6 +432,10 @@ const App: React.FC = () => {
             
             if (error.message.includes("Could not find the 'is_new_edit' column")) {
                 alert("Failed to create project. This feature requires a database change. Please add a boolean column named 'is_new_edit' to your 'projects' table in Supabase.");
+                if (!newEditFailureDetected.current) {
+                    newEditFailureDetected.current = true;
+                    setIsNewEditColumnMissing(true);
+                }
             } else {
                 console.error("Error creating project:", error);
                 alert(`Failed to add project: ${error.message}`);
@@ -408,71 +447,55 @@ const App: React.FC = () => {
     }, []);
 
     const handleUpdateProjectField = useCallback(async (id: number, field: keyof Project, value: any) => {
-        // Handle Delete requests separately for cleaner logic
-        if (field === 'status' && value === 'deleted') {
-            let deletedProject: Project | undefined;
-            let originalIndex: number = -1;
+        if (field === 'is_new_edit' && (isNewEditColumnMissing || newEditFailureDetected.current)) {
+            console.warn("Update for 'is_new_edit' blocked because the database column is missing.");
+            return; 
+        }
 
-            // Optimistically remove the project and save it and its index for potential rollback
-            setProjects(currentProjects => {
-                originalIndex = currentProjects.findIndex(p => p.id === id);
-                if (originalIndex === -1) return currentProjects; // Not found
-                deletedProject = currentProjects[originalIndex];
-                return currentProjects.filter(p => p.id !== id);
-            });
+        const projectForRollback = projects.find(p => p.id === id);
 
-            if (!deletedProject) return; // Project wasn't found to delete
-
-            const { error } = await supabase.from('projects').delete().eq('id', id);
-
-            if (error) {
-                alert(`Failed to delete project: ${error.message}.`);
-                // If the delete failed, add the project back at its original position
-                if (deletedProject && originalIndex > -1) {
-                    setProjects(currentProjects => {
-                        const restoredProjects = [...currentProjects];
-                        restoredProjects.splice(originalIndex, 0, deletedProject!);
-                        return restoredProjects;
-                    });
-                }
-            }
+        if (!projectForRollback) {
+            console.error(`Project with id ${id} not found for update. It may have been deleted by another user.`);
             return;
         }
 
-        // Handle field updates
-        let originalProjectState: Project | undefined;
+        const isDelete = field === 'status' && value === 'deleted';
 
-        // Optimistically update the project and save its original state for potential rollback
-        setProjects(currentProjects => {
-            originalProjectState = currentProjects.find(p => p.id === id);
-            if (!originalProjectState) return currentProjects; // Project not found, do nothing.
-            return currentProjects.map(p => (p.id === id ? { ...p, [field]: value } : p));
-        });
-
-        // If we couldn't find the project, don't try to update it in the DB
-        if (!originalProjectState) {
-            console.error(`Project with id ${id} not found for update.`);
-            return;
+        if (isDelete) {
+            setProjects(currentProjects => currentProjects.filter(p => p.id !== id));
+        } else {
+            setProjects(currentProjects => currentProjects.map(p => p.id === id ? { ...p, [field]: value } : p));
         }
 
-        // Update database
-        const { error } = await supabase.from('projects').update({ [field]: value }).eq('id', id);
+        const { error } = isDelete
+            ? await supabase.from('projects').delete().eq('id', id)
+            : await supabase.from('projects').update({ [field]: value }).eq('id', id);
 
-        // If there was an error, revert the change using the saved original state
         if (error) {
-            setProjects(currentProjects =>
-                currentProjects.map(p => (p.id === id ? originalProjectState! : p))
-            );
+            console.error(`Failed to ${isDelete ? 'delete' : 'update'} project:`, error.message);
 
-            // Specific error for missing is_new_edit column
-            if (field === 'is_new_edit' && error.message.includes("Could not find the 'is_new_edit' column")) {
-                alert("Failed to save 'New Edit' status. This feature requires a database change. Please add a boolean column named 'is_new_edit' to your 'projects' table in Supabase.");
+            if (isDelete) {
+                setProjects(currentProjects => {
+                    if (currentProjects.some(p => p.id === id)) return currentProjects;
+                    return [projectForRollback, ...currentProjects];
+                });
             } else {
-                console.error('Error updating project field:', error.message);
+                setProjects(currentProjects => currentProjects.map(p =>
+                    p.id === id ? { ...p, [field]: projectForRollback[field] } : p
+                ));
+            }
+            
+            if (error.message.includes("Could not find the 'is_new_edit' column")) {
+                console.error("Feature 'New Edit' is unavailable. Please add a boolean column named 'is_new_edit' to your 'projects' table in Supabase.");
+                if (!newEditFailureDetected.current) {
+                    newEditFailureDetected.current = true;
+                    setIsNewEditColumnMissing(true);
+                }
+            } else {
                 alert(`Failed to update project: ${error.message}.`);
             }
         }
-    }, []);
+    }, [projects, isNewEditColumnMissing]);
 
 
     // --- ROUTING ---
@@ -501,7 +524,7 @@ const App: React.FC = () => {
     if (route === '/editor' || route === '/editor.html') {
         return <EditorPage projects={projects} onUpdate={handleUpdateProjectField} />;
     }
-    return <ManagerDashboard projects={projects} dailyNotesContent={dailyNotesContent} onAddProject={handleAddNewProject} onUpdateProject={handleUpdateProjectField} onNotesChange={handleNotesChange} />;
+    return <ManagerDashboard projects={projects} dailyNotesContent={dailyNotesContent} onAddProject={handleAddNewProject} onUpdateProject={handleUpdateProjectField} onNotesChange={handleNotesChange} isNewEditColumnMissing={isNewEditColumnMissing} isLoading={isLoading} />;
 };
 
 export default App;

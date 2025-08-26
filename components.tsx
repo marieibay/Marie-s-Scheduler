@@ -352,8 +352,14 @@ export const SelectInput: React.FC<SelectInputProps> = ({ value, onChange, optio
 
 
 // Project Card for Manager and Client Views
-interface ProjectCardProps { project: Project; onUpdate: (id: number, field: keyof Project, value: string | number | boolean | null) => void; onDelete?: (project: Project) => void; isClientView?: boolean }
-export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onDelete, isClientView = false }) => {
+interface ProjectCardProps {
+    project: Project;
+    onUpdate: (id: number, field: keyof Project, value: string | number | boolean | null) => void;
+    onDelete?: (project: Project) => void;
+    isClientView?: boolean;
+    isNewEditColumnMissing?: boolean;
+}
+export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onDelete, isClientView = false, isNewEditColumnMissing = false }) => {
     const handleUpdate = (field: keyof Project, value: any) => onUpdate(project.id, field, value);
     const renderStatusButtons = () => {
         switch (project.status) {
@@ -398,7 +404,13 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onD
             <div className="w-full lg:w-7/12 flex-grow">
                 {!isClientView && (
                     <div className="flex justify-end items-center gap-2 mb-4">
-                        <button onClick={() => handleUpdate('is_new_edit', !project.is_new_edit)} className={`px-3 py-1 text-xs font-semibold rounded-md shadow-sm transition-colors whitespace-nowrap ${project.is_new_edit ? 'bg-amber-500 text-white hover:bg-amber-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>New Edit</button>
+                        <button 
+                            onClick={() => handleUpdate('is_new_edit', !project.is_new_edit)} 
+                            disabled={isNewEditColumnMissing}
+                            title={isNewEditColumnMissing ? "Feature unavailable: Please add 'is_new_edit' column to the database." : "Toggle New Edit status"}
+                            className={`px-3 py-1 text-xs font-semibold rounded-md shadow-sm transition-colors whitespace-nowrap ${project.is_new_edit ? 'bg-amber-500 text-white hover:bg-amber-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'} disabled:bg-gray-200 disabled:text-gray-400 disabled:cursor-not-allowed`}>
+                            New Edit
+                        </button>
                         <button onClick={() => handleUpdate('is_on_hold', !project.is_on_hold)} className={`px-3 py-1 text-xs font-semibold rounded-md shadow-sm transition-colors whitespace-nowrap ${project.is_on_hold ? 'bg-yellow-500 text-white hover:bg-yellow-600' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}>{project.is_on_hold ? 'On Hold' : 'Set Hold'}</button>
                         {renderStatusButtons()}
                         {onDelete && <button onClick={() => onDelete(project)} className="p-1.5 rounded-full text-gray-400 hover:bg-red-100 hover:text-red-600" title="Delete"><TrashIcon /></button>}
@@ -440,14 +452,15 @@ interface ViewProps {
     projects: Project[];
     onUpdate: (id: number, field: keyof Project, value: any) => void;
     onDelete?: (project: Project) => void;
+    isNewEditColumnMissing?: boolean;
 }
 
-export const ManagerView: React.FC<ViewProps> = ({ projects, onUpdate, onDelete }) => {
+export const ManagerView: React.FC<ViewProps> = ({ projects, onUpdate, onDelete, isNewEditColumnMissing }) => {
     if (projects.length === 0) return <div className="text-center text-gray-500 py-10">No projects to display in this category.</div>;
     return (
         <div className="space-y-4">
             {projects.map(project => (
-                <ProjectCard key={project.id} project={project} onUpdate={onUpdate} onDelete={onDelete} isClientView={false} />
+                <ProjectCard key={project.id} project={project} onUpdate={onUpdate} onDelete={onDelete} isClientView={false} isNewEditColumnMissing={isNewEditColumnMissing} />
             ))}
         </div>
     );
