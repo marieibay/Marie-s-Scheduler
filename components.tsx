@@ -508,11 +508,11 @@ export const EditorView: React.FC<Omit<ViewProps, 'onDelete'>> = ({ projects, on
                             <td className="px-6 py-4 font-semibold">{project.editor}</td>
                             <td className="px-6 py-4">{project.est_rt}</td>
                             <td className="px-6 py-4 w-32">
-                               <input type="number" step="0.01" value={project.total_edited || ''} onChange={(e) => handleUpdate(project.id, 'total_edited', parseFloat(e.target.value))} className="w-full p-1 rounded border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"/>
+                               <input type="number" step="0.01" value={project.total_edited ?? ''} onChange={(e) => handleUpdate(project.id, 'total_edited', parseFloat(e.target.value) || 0)} className="w-full p-1 rounded border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"/>
                             </td>
                             <td className="px-6 py-4 font-semibold">{calculateWhatsLeft(project.est_rt, project.total_edited)}</td>
                             <td className="px-6 py-4 w-32">
-                               <input type="number" step="0.01" value={project.remaining_raw || ''} onChange={(e) => handleUpdate(project.id, 'remaining_raw', parseFloat(e.target.value))} className="w-full p-1 rounded border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"/>
+                               <input type="number" step="0.01" value={project.remaining_raw ?? ''} onChange={(e) => handleUpdate(project.id, 'remaining_raw', parseFloat(e.target.value) || 0)} className="w-full p-1 rounded border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"/>
                             </td>
                         </tr>
                     ))}
