@@ -60,6 +60,7 @@ const ManagerDashboard: React.FC<{
     const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
     const [isNotesVisible, setIsNotesVisible] = useState(false);
     const [sortBy, setSortBy] = useState<'default' | 'date'>('default');
+    const [allActiveSortBy, setAllActiveSortBy] = useState<'client' | 'date'>('client');
     
     // --- DERIVE STATE DIRECTLY FROM PROPS ON EVERY RENDER ---
     const ongoingProjects = useMemo(() => projects.filter(p => p.status === 'ongoing'), [projects]);
@@ -108,6 +109,13 @@ const ManagerDashboard: React.FC<{
             setSortBy('default');
         }
     }, [currentPage, viewMode]);
+
+    // Reset sort for All Active view when navigating away
+    useEffect(() => {
+        if (currentPage !== 'all-active') {
+            setAllActiveSortBy('client');
+        }
+    }, [currentPage]);
 
     const handleOpenDeleteModal = useCallback((project: Project) => setProjectToDelete(project), []);
     const handleCloseDeleteModal = useCallback(() => setProjectToDelete(null), []);
@@ -161,11 +169,22 @@ const ManagerDashboard: React.FC<{
         // New All Active view (Manager only)
         if (currentPage === 'all-active') {
             const projectsToDisplay = projects.filter(p => p.status === 'ongoing' || p.status === 'done');
-            const { groupedProjects, sortedClients } = getGroupedAndSortedProjects(projectsToDisplay);
 
-            if (sortedClients.length === 0) {
+            if (projectsToDisplay.length === 0) {
                 return <div className="text-center text-gray-500 py-10">No active projects to display.</div>;
             }
+
+            if (allActiveSortBy === 'date') {
+                const dateSortedProjects = [...projectsToDisplay].sort((a, b) => {
+                    if (!a.due_date) return 1;
+                    if (!b.due_date) return -1;
+                    return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
+                });
+                return <ManagerView projects={dateSortedProjects} onUpdate={onUpdateProject} onDelete={handleOpenDeleteModal} isNewEditColumnMissing={isNewEditColumnMissing} />;
+            }
+            
+            // Default: sort by client
+            const { groupedProjects, sortedClients } = getGroupedAndSortedProjects(projectsToDisplay);
 
             return (
                 <div className="space-y-8">
@@ -271,6 +290,22 @@ const ManagerDashboard: React.FC<{
                                             className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors ${sortBy === 'default' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
                                         >
                                             Reset Sort
+                                        </button>
+                                    </div>
+                                )}
+                                {currentPage === 'all-active' && viewMode === 'manager' && (
+                                    <div className="flex items-center gap-2">
+                                        <button 
+                                            onClick={() => setAllActiveSortBy('client')} 
+                                            className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors ${allActiveSortBy === 'client' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                                        >
+                                            Sort by Client
+                                        </button>
+                                        <button 
+                                            onClick={() => setAllActiveSortBy('date')} 
+                                            className={`px-3 py-1.5 rounded-md text-sm font-semibold transition-colors ${allActiveSortBy === 'date' ? 'bg-indigo-100 text-indigo-700' : 'bg-gray-200 text-gray-700 hover:bg-gray-300'}`}
+                                        >
+                                            Sort by Date
                                         </button>
                                     </div>
                                 )}
