@@ -92,9 +92,10 @@ const ManagerDashboard: React.FC<{
     onAddProject: () => void;
     onUpdateProject: (id: number, field: keyof Project, value: string | number | boolean | null) => void;
     onNotesChange: (newContent: string) => void;
+    onHistoricalCorrection: (projectId: number, hours: number) => Promise<void>;
     isNewEditColumnMissing: boolean;
     isLoading: boolean;
-}> = ({ projects, dailyNotesContent, productivityByProject, onAddProject, onUpdateProject, onNotesChange, isNewEditColumnMissing, isLoading }) => {
+}> = ({ projects, dailyNotesContent, productivityByProject, onAddProject, onUpdateProject, onNotesChange, onHistoricalCorrection, isNewEditColumnMissing, isLoading }) => {
     const [viewMode, setViewMode] = useState<ViewMode>('manager');
     const [currentPage, setCurrentPage] = useState<'ongoing' | 'done' | 'all-active' | 'archived' | 'editorView'>('ongoing');
     const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
@@ -196,6 +197,7 @@ const ManagerDashboard: React.FC<{
                                         key={project.id}
                                         project={project}
                                         onUpdate={onUpdateProject}
+                                        onHistoricalCorrection={onHistoricalCorrection}
                                         isClientView={true}
                                         productivityBreakdown={productivityByProject?.[project.id]}
                                     />
@@ -221,7 +223,7 @@ const ManagerDashboard: React.FC<{
                     if (!b.due_date) return -1;
                     return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
                 });
-                return <ManagerView projects={dateSortedProjects} onUpdate={onUpdateProject} onDelete={handleOpenDeleteModal} isNewEditColumnMissing={isNewEditColumnMissing} productivityByProject={productivityByProject} />;
+                return <ManagerView projects={dateSortedProjects} onUpdate={onUpdateProject} onDelete={handleOpenDeleteModal} onHistoricalCorrection={onHistoricalCorrection} isNewEditColumnMissing={isNewEditColumnMissing} productivityByProject={productivityByProject} />;
             }
             
             // Default: sort by client
@@ -239,6 +241,7 @@ const ManagerDashboard: React.FC<{
                                         project={project}
                                         onUpdate={onUpdateProject}
                                         onDelete={handleOpenDeleteModal}
+                                        onHistoricalCorrection={onHistoricalCorrection}
                                         isClientView={false}
                                         isNewEditColumnMissing={isNewEditColumnMissing}
                                         productivityBreakdown={productivityByProject?.[project.id]}
@@ -277,7 +280,7 @@ const ManagerDashboard: React.FC<{
             projectsForView = archivedProjects;
         }
 
-        return <ManagerView projects={projectsForView} onUpdate={onUpdateProject} onDelete={handleOpenDeleteModal} isNewEditColumnMissing={isNewEditColumnMissing} productivityByProject={productivityByProject} />;
+        return <ManagerView projects={projectsForView} onUpdate={onUpdateProject} onDelete={handleOpenDeleteModal} onHistoricalCorrection={onHistoricalCorrection} isNewEditColumnMissing={isNewEditColumnMissing} productivityByProject={productivityByProject} />;
     };
 
     return (
@@ -474,7 +477,21 @@ const App: React.FC = () => {
         // Subscribe to productivity log changes
         const logsChannel = supabase.channel('productivity_logs')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'productivity_logs' }, async (payload) => {
-                fetchLogs(); // Re-fetch all logs for simplicity and consistency
+                // Instead of a full refetch, intelligently update the local state
+                if (payload.eventType === 'INSERT') {
+                    setProductivityLogs(current => [...current, payload.new as ProductivityLog]);
+                } else if (payload.eventType === 'UPDATE') {
+                    setProductivityLogs(current => current.map(l => l.id === payload.new.id ? payload.new as ProductivityLog : l));
+                } else if (payload.eventType === 'DELETE') {
+                    const deletedLog = payload.old as Partial<ProductivityLog>;
+                    // If we don't have the ID from the old payload, we might need a more robust delete.
+                    // For now, assume ID is present or handle deletes by refetching.
+                    if (deletedLog.id) {
+                       setProductivityLogs(current => current.filter(l => l.id !== deletedLog.id));
+                    } else {
+                       fetchLogs(); // Fallback to refetch if ID is missing
+                    }
+                }
             }).subscribe();
 
 
@@ -560,6 +577,12 @@ const App: React.FC = () => {
             return; 
         }
 
+        // Prevent direct updates to total_edited as it's now a calculated field.
+        if (field === 'total_edited') {
+            console.warn("Direct updates to 'total_edited' are deprecated. It is now calculated from productivity logs.");
+            return;
+        }
+
         const projectForRollback = projects.find(p => p.id === id);
 
         if (!projectForRollback) {
@@ -606,6 +629,27 @@ const App: React.FC = () => {
         }
     }, [projects, isNewEditColumnMissing]);
 
+    const handleHistoricalCorrection = useCallback(async (projectId: number, hours: number) => {
+        const project = projects.find(p => p.id === projectId);
+        if (!project) return;
+        
+        const correctionLog: ProductivityLog = {
+            project_id: projectId,
+            editor_name: 'Historical Correction',
+            // Use a date far in the past to avoid conflicting with real logs.
+            date: '2000-01-01',
+            hours_worked: hours,
+        };
+
+        const { error } = await supabase
+            .from('productivity_logs')
+            .upsert(correctionLog, { onConflict: 'editor_name,project_id,date' });
+
+        if (error) {
+            alert(`Failed to save correction: ${error.message}`);
+        }
+    }, [projects]);
+
 
     // --- ROUTING ---
     useEffect(() => {
@@ -633,7 +677,7 @@ const App: React.FC = () => {
     if (route === '/editor' || route === '/editor.html') {
         return <EditorDashboard projects={projects} productivityLogs={productivityLogs} onUpdateProjectField={handleUpdateProjectField} />;
     }
-    return <ManagerDashboard projects={projects} dailyNotesContent={dailyNotesContent} onAddProject={handleAddNewProject} onUpdateProject={handleUpdateProjectField} onNotesChange={handleNotesChange} isNewEditColumnMissing={isNewEditColumnMissing} isLoading={isLoading} productivityByProject={productivityByProject} />;
+    return <ManagerDashboard projects={projects} dailyNotesContent={dailyNotesContent} onAddProject={handleAddNewProject} onUpdateProject={handleUpdateProjectField} onNotesChange={handleNotesChange} onHistoricalCorrection={handleHistoricalCorrection} isNewEditColumnMissing={isNewEditColumnMissing} isLoading={isLoading} productivityByProject={productivityByProject} />;
 };
 
 export default App;

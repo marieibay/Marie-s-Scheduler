@@ -9,7 +9,7 @@ const INLINE_INPUT_CLASS = "bg-transparent focus:bg-white w-full p-1 -m-1 rounde
 
 // --- ICON COMPONENTS ---
 export const PlusIcon: React.FC = () => (
-    <svg xmlns="http://www.w.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
         <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
     </svg>
 );
@@ -43,6 +43,13 @@ const TrashIcon: React.FC<{className?: string}> = ({ className = "h-5 w-5" }) =>
         <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" />
     </svg>
 );
+
+const CalculatorIcon: React.FC<{className?: string}> = ({ className = "h-5 w-5" }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} viewBox="0 0 20 20" fill="currentColor">
+      <path fillRule="evenodd" d="M6 2a2 2 0 00-2 2v12a2 2 0 002 2h8a2 2 0 002-2V4a2 2 0 00-2-2H6zm1 4a1 1 0 000 2h6a1 1 0 100-2H7zM7 9a1 1 0 011-1h4a1 1 0 110 2H8a1 1 0 01-1-1zm1 3a1 1 0 000 2h2a1 1 0 100-2H8z" clipRule="evenodd" />
+    </svg>
+);
+
 
 const StrikethroughIcon: React.FC = () => (
   <svg
@@ -293,6 +300,58 @@ export const DeleteLogRowConfirmationModal: React.FC<DeleteLogRowConfirmationMod
     </div>
 );
 
+// Historical Correction Modal
+interface HistoricalCorrectionModalProps {
+    project: Project;
+    onSave: (hours: number) => void;
+    onClose: () => void;
+}
+const HistoricalCorrectionModal: React.FC<HistoricalCorrectionModalProps> = ({ project, onSave, onClose }) => {
+    const [hours, setHours] = useState('');
+    
+    const handleSave = () => {
+        const numericHours = parseFloat(hours);
+        if (!isNaN(numericHours) && numericHours >= 0) {
+            onSave(numericHours);
+            onClose();
+        } else {
+            alert("Please enter a valid, non-negative number for the hours.");
+        }
+    };
+    
+    return (
+        <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
+            <div className="relative mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
+                <div className="mt-3 text-center">
+                    <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-blue-100">
+                        <CalculatorIcon className="h-6 w-6 text-blue-600"/>
+                    </div>
+                    <h3 className="text-lg leading-6 font-medium text-gray-900 mt-2">Correct Historical Hours</h3>
+                    <p className="text-sm text-gray-500 mt-2 px-4">For project: <strong>{project.title}</strong></p>
+                    <div className="mt-4 px-7 py-3">
+                        <label htmlFor="historical-hours" className="block text-sm font-medium text-gray-700 text-left mb-1">
+                            Enter total hours logged before the new system
+                        </label>
+                        <input
+                            type="number"
+                            id="historical-hours"
+                            value={hours}
+                            onChange={(e) => setHours(e.target.value)}
+                            className="w-full p-2 border border-gray-300 rounded-md shadow-sm"
+                            placeholder="e.g., 1.75"
+                        />
+                         <p className="text-xs text-gray-400 mt-2 text-left">This will create a single, back-dated log entry to restore the project's total. This does not affect any hours already logged in the new system.</p>
+                    </div>
+                    <div className="items-center px-4 py-3 space-x-4">
+                        <button onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Cancel</button>
+                        <button onClick={handleSave} className="px-4 py-2 bg-blue-600 text-white rounded-md shadow-sm hover:bg-blue-700">Save Correction</button>
+                    </div>
+                </div>
+            </div>
+        </div>
+    );
+};
+
 
 // Due Date Display with Alerts
 interface DueDateDisplayProps {
@@ -509,12 +568,21 @@ interface ProjectCardProps {
     project: Project;
     onUpdate: (id: number, field: keyof Project, value: string | number | boolean | null) => void;
     onDelete?: (project: Project) => void;
+    onHistoricalCorrection: (projectId: number, hours: number) => Promise<void>;
     isClientView?: boolean;
     isNewEditColumnMissing?: boolean;
     productivityBreakdown?: Record<string, number>;
 }
-export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onDelete, isClientView = false, isNewEditColumnMissing = false, productivityBreakdown }) => {
+export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onDelete, onHistoricalCorrection, isClientView = false, isNewEditColumnMissing = false, productivityBreakdown }) => {
+    const [isCorrectionModalOpen, setIsCorrectionModalOpen] = useState(false);
+    
     const handleUpdate = (field: keyof Project, value: any) => onUpdate(project.id, field, value);
+    
+    const calculatedTotalEdited = useMemo(() => {
+        if (!productivityBreakdown) return 0;
+        return Object.values(productivityBreakdown).reduce((sum, hours) => sum + hours, 0);
+    }, [productivityBreakdown]);
+
     const renderStatusButtons = () => {
         switch (project.status) {
             case 'ongoing': return <button onClick={() => handleUpdate('status', 'done')} className="px-3 py-1 text-xs font-semibold rounded-md shadow-sm transition-colors whitespace-nowrap bg-green-500 text-white hover:bg-green-600">Mark as Done</button>;
@@ -543,6 +611,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onD
     }, [project.status, project.is_on_hold, project.is_new_edit]);
 
     return (
+        <>
         <div className={`p-4 rounded-lg shadow-md flex flex-col lg:flex-row items-start gap-6 hover:shadow-lg transition-all duration-300 ${cardBgClass}`} data-id={project.id}>
             <div className="w-full lg:w-5/12 space-y-3 flex-shrink-0">
                 {isClientView ? 
@@ -558,6 +627,13 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onD
             <div className="w-full lg:w-7/12 flex-grow">
                 {!isClientView && (
                     <div className="flex justify-end items-center gap-2 mb-4">
+                        <button 
+                             onClick={() => setIsCorrectionModalOpen(true)}
+                             title="Correct historical hours for this project"
+                             className="p-1.5 rounded-full text-gray-400 hover:bg-blue-100 hover:text-blue-600"
+                        >
+                            <CalculatorIcon />
+                        </button>
                         <button 
                             onClick={() => handleUpdate('is_new_edit', !project.is_new_edit)} 
                             disabled={isNewEditColumnMissing}
@@ -582,12 +658,12 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onD
                             <p className="text-xs text-blue-600 mt-1">EST RT</p>
                         </div>
                         <div className="bg-yellow-50 p-2 rounded-lg w-24 text-center relative group">
-                            <p className="font-bold text-lg text-yellow-800 text-center h-9 flex items-center justify-center">{project.total_edited || 0}</p>
+                            <p className="font-bold text-lg text-yellow-800 text-center h-9 flex items-center justify-center">{calculatedTotalEdited.toFixed(2)}</p>
                             <p className="text-xs text-yellow-600 mt-1">Edited</p>
                             <HoursBreakdownTooltip breakdown={productivityBreakdown} />
                         </div>
                         <div className="bg-green-50 p-2 rounded-lg w-24 text-center">
-                            <p className="font-bold text-lg text-green-800 h-9 flex items-center justify-center">{calculateWhatsLeft(project.est_rt, project.total_edited)}</p>
+                            <p className="font-bold text-lg text-green-800 h-9 flex items-center justify-center">{calculateWhatsLeft(project.est_rt, calculatedTotalEdited)}</p>
                             <p className="text-xs text-green-600 mt-1">What's Left</p>
                         </div>
                         <div className="bg-purple-50 p-2 rounded-lg w-24 text-center">
@@ -598,6 +674,14 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onD
                 </div>
             </div>
         </div>
+        {isCorrectionModalOpen && (
+            <HistoricalCorrectionModal
+                project={project}
+                onClose={() => setIsCorrectionModalOpen(false)}
+                onSave={(hours) => onHistoricalCorrection(project.id, hours)}
+            />
+        )}
+        </>
     );
 };
 
@@ -607,33 +691,34 @@ interface ViewProps {
     projects: Project[];
     onUpdate: (id: number, field: keyof Project, value: any) => void;
     onDelete?: (project: Project) => void;
+    onHistoricalCorrection: (projectId: number, hours: number) => Promise<void>;
     isNewEditColumnMissing?: boolean;
     productivityByProject?: Record<number, Record<string, number>>;
 }
 
-export const ManagerView: React.FC<ViewProps> = ({ projects, onUpdate, onDelete, isNewEditColumnMissing, productivityByProject }) => {
+export const ManagerView: React.FC<ViewProps> = ({ projects, onUpdate, onDelete, onHistoricalCorrection, isNewEditColumnMissing, productivityByProject }) => {
     if (projects.length === 0) return <div className="text-center text-gray-500 py-10">No projects to display in this category.</div>;
     return (
         <div className="space-y-4">
             {projects.map(project => (
-                <ProjectCard key={project.id} project={project} onUpdate={onUpdate} onDelete={onDelete} isClientView={false} isNewEditColumnMissing={isNewEditColumnMissing} productivityBreakdown={productivityByProject?.[project.id]} />
+                <ProjectCard key={project.id} project={project} onUpdate={onUpdate} onDelete={onDelete} onHistoricalCorrection={onHistoricalCorrection} isClientView={false} isNewEditColumnMissing={isNewEditColumnMissing} productivityBreakdown={productivityByProject?.[project.id]} />
             ))}
         </div>
     );
 };
 
-export const ClientView: React.FC<Omit<ViewProps, 'onDelete'>> = ({ projects, onUpdate, productivityByProject }) => {
+export const ClientView: React.FC<Omit<ViewProps, 'onDelete'>> = ({ projects, onUpdate, onHistoricalCorrection, productivityByProject }) => {
     if (projects.length === 0) return <div className="text-center text-gray-500 py-10">No projects to display in this category.</div>;
     return (
         <div className="space-y-4">
             {projects.map(project => (
-                 <ProjectCard key={project.id} project={project} onUpdate={onUpdate} isClientView={true} productivityBreakdown={productivityByProject?.[project.id]} />
+                 <ProjectCard key={project.id} project={project} onUpdate={onUpdate} onHistoricalCorrection={onHistoricalCorrection} isClientView={true} productivityBreakdown={productivityByProject?.[project.id]} />
             ))}
         </div>
     );
 };
 
-export const EditorView: React.FC<Omit<ViewProps, 'onDelete'>> = ({ projects, onUpdate, productivityByProject }) => {
+export const EditorView: React.FC<Omit<ViewProps, 'onDelete' | 'onHistoricalCorrection'>> = ({ projects, onUpdate, productivityByProject }) => {
     const handleUpdate = (id: number, field: keyof Project, value: any) => onUpdate(id, field, value);
 
     if (projects.length === 0) return <div className="text-center text-gray-500 py-10">You have no ongoing projects assigned.</div>;
@@ -654,25 +739,28 @@ export const EditorView: React.FC<Omit<ViewProps, 'onDelete'>> = ({ projects, on
                     </tr>
                 </thead>
                 <tbody>
-                    {projects.map((project) => (
-                        <tr key={project.id} className={`border-b hover:bg-gray-50 ${project.is_on_hold ? 'bg-pink-100' : 'bg-white'}`}>
-                            <td className="px-6 py-4 font-semibold text-gray-900">{getClientName(project)}</td>
-                            <td className="px-6 py-4">{project.title}</td>
-                            <td className="px-6 py-4">
-                               <DueDateDisplay due_date={project.due_date} original_due_date={project.original_due_date} onUpdate={(newDate) => handleUpdate(project.id, 'due_date', newDate)} isReadOnly={true} />
-                            </td>
-                            <td className="px-6 py-4 font-semibold">{project.editor}</td>
-                            <td className="px-6 py-4 text-center">{project.est_rt}</td>
-                            <td className="px-6 py-4 relative group text-center">
-                                {project.total_edited}
-                                <HoursBreakdownTooltip breakdown={productivityByProject?.[project.id]} />
-                            </td>
-                            <td className="px-6 py-4 font-semibold text-center">{calculateWhatsLeft(project.est_rt, project.total_edited)}</td>
-                            <td className="px-6 py-4 w-32">
-                               <input type="number" step="0.01" value={project.remaining_raw ?? ''} onChange={(e) => handleUpdate(project.id, 'remaining_raw', parseFloat(e.target.value) || 0)} className="w-full p-1 rounded border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"/>
-                            </td>
-                        </tr>
-                    ))}
+                    {projects.map((project) => {
+                        const calculatedTotalEdited = Object.values(productivityByProject?.[project.id] || {}).reduce((sum, h) => sum + h, 0);
+                        return (
+                            <tr key={project.id} className={`border-b hover:bg-gray-50 ${project.is_on_hold ? 'bg-pink-100' : 'bg-white'}`}>
+                                <td className="px-6 py-4 font-semibold text-gray-900">{getClientName(project)}</td>
+                                <td className="px-6 py-4">{project.title}</td>
+                                <td className="px-6 py-4">
+                                   <DueDateDisplay due_date={project.due_date} original_due_date={project.original_due_date} onUpdate={(newDate) => handleUpdate(project.id, 'due_date', newDate)} isReadOnly={true} />
+                                </td>
+                                <td className="px-6 py-4 font-semibold">{project.editor}</td>
+                                <td className="px-6 py-4 text-center">{project.est_rt}</td>
+                                <td className="px-6 py-4 relative group text-center">
+                                    {calculatedTotalEdited.toFixed(2)}
+                                    <HoursBreakdownTooltip breakdown={productivityByProject?.[project.id]} />
+                                </td>
+                                <td className="px-6 py-4 font-semibold text-center">{calculateWhatsLeft(project.est_rt, calculatedTotalEdited)}</td>
+                                <td className="px-6 py-4 w-32">
+                                   <input type="number" step="0.01" value={project.remaining_raw ?? ''} onChange={(e) => handleUpdate(project.id, 'remaining_raw', parseFloat(e.target.value) || 0)} className="w-full p-1 rounded border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"/>
+                                </td>
+                            </tr>
+                        );
+                    })}
                 </tbody>
             </table>
         </div>
@@ -855,10 +943,6 @@ const ProjectTimeLogCard: React.FC<{
         } else {
             await supabase.from('productivity_logs').delete().match({ project_id: project.id, editor_name: editorName, date });
         }
-
-        const { data: allProjectLogs } = await supabase.from('productivity_logs').select('hours_worked').eq('project_id', project.id);
-        const newTotal = (allProjectLogs || []).reduce((sum, log) => sum + log.hours_worked, 0);
-        onUpdateProjectField(project.id, 'total_edited', newTotal);
     }, 750)).current;
 
     const debouncedSaveRaw = useRef(debounce((value: number) => {
@@ -913,11 +997,6 @@ const ProjectTimeLogCard: React.FC<{
 
         if (error) {
             alert(`Failed to delete logs: ${error.message}`);
-        } else {
-            // After deleting, refetch all logs for the project to recalculate total
-            const { data: allProjectLogs } = await supabase.from('productivity_logs').select('hours_worked').eq('project_id', project.id);
-            const newTotal = (allProjectLogs || []).reduce((sum, log) => sum + log.hours_worked, 0);
-            onUpdateProjectField(project.id, 'total_edited', newTotal);
         }
 
         setEditorToDelete(null); // Close the modal
