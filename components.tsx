@@ -794,7 +794,9 @@ const ProjectTimeLogCard: React.FC<{
 
     const handleRawUpdate = (e: React.ChangeEvent<HTMLInputElement>) => {
         const value = parseFloat(e.target.value) || 0;
-        onUpdateProjectField(project.id, 'remaining_raw', value);
+        debouncedSave(() => {
+            onUpdateProjectField(project.id, 'remaining_raw', value);
+        });
     };
 
     const projectTotalForWeek = projectLogsForWeek.reduce((sum, log) => sum + log.hours_worked, 0);
@@ -806,20 +808,6 @@ const ProjectTimeLogCard: React.FC<{
                     <h3 className="font-bold text-lg text-gray-800 truncate" title={project.title}>{project.title}</h3>
                     <p className="text-sm text-gray-500">Main Editor: {project.editor || 'Unassigned'}</p>
                 </div>
-                {project.editor === selectedEditor && (
-                    <div className="flex items-center gap-2 flex-shrink-0 mx-4">
-                         <label htmlFor={`raw-${project.id}`} className="text-sm font-medium text-gray-600">Remaining RAW:</label>
-                         <input
-                            id={`raw-${project.id}`}
-                            type="number"
-                            step="0.01"
-                            value={project.remaining_raw}
-                            onClick={(e) => e.stopPropagation()}
-                            onChange={handleRawUpdate}
-                            className="w-24 p-1.5 text-center rounded border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                         />
-                    </div>
-                )}
                 <div className="text-right flex-shrink-0">
                     <span className="font-semibold text-indigo-600 text-xl">{projectTotalForWeek.toFixed(2)} hrs</span>
                     <span className="text-sm text-gray-500 block">logged this week</span>
@@ -827,6 +815,19 @@ const ProjectTimeLogCard: React.FC<{
             </button>
             {isOpen && (
                 <div className="p-4 border-t border-gray-200">
+                    {project.editor === selectedEditor && (
+                        <div className="flex items-center gap-2 mb-4 p-3 bg-indigo-50 rounded-lg border border-indigo-200">
+                             <label htmlFor={`raw-${project.id}`} className="text-sm font-semibold text-indigo-800">Remaining RAW:</label>
+                             <input
+                                id={`raw-${project.id}`}
+                                type="number"
+                                step="0.01"
+                                value={project.remaining_raw}
+                                onChange={handleRawUpdate}
+                                className="w-24 p-1.5 text-center rounded border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                             />
+                        </div>
+                    )}
                      <table className="w-full text-sm">
                         <thead className="text-xs text-gray-700 uppercase bg-gray-100">
                              <tr>

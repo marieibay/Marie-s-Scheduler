@@ -34,16 +34,6 @@ const EditorDashboard: React.FC<{
         localStorage.setItem('selectedEditor', selectedEditor);
     }, [selectedEditor]);
 
-    const assignedProjects = useMemo(() => {
-        return [...projects]
-          .filter(p => p.status === 'ongoing' && p.editor === selectedEditor)
-          .sort((a, b) => {
-            if (!a.due_date) return 1;
-            if (!b.due_date) return -1;
-            return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
-          });
-    }, [projects, selectedEditor]);
-
     const allOngoingProjects = useMemo(() => {
         return [...projects]
             .filter(p => p.status === 'ongoing')
@@ -75,9 +65,6 @@ const EditorDashboard: React.FC<{
                 <button onClick={() => setActiveTab('logHours')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'logHours' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
                     Log Project Hours
                 </button>
-                <button onClick={() => setActiveTab('myProjects')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'myProjects' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
-                    My Open Projects
-                </button>
                  <button onClick={() => setActiveTab('myStats')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'myStats' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
                     My Stats
                 </button>
@@ -88,7 +75,6 @@ const EditorDashboard: React.FC<{
         </div>
 
         <main>
-            {activeTab === 'myProjects' && <EditorView projects={assignedProjects} onUpdate={onUpdateProjectField} />}
             {activeTab === 'logHours' && <ProjectLoggerDashboard projects={allOngoingProjects} allLogs={productivityLogs} selectedEditor={selectedEditor} onUpdateProjectField={onUpdateProjectField} />}
             {activeTab === 'myStats' && <PersonalStatsView allLogs={productivityLogs} selectedEditor={selectedEditor} projects={projects} />}
             {activeTab === 'teamProductivity' && <TeamProductivityView />}
