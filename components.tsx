@@ -68,6 +68,15 @@ const CalendarIcon: React.FC<{ className?: string }> = ({ className }) => (
 
 // --- CHILD COMPONENTS ---
 
+// Helper for debouncing
+function debounce<F extends (...args: any[]) => any>(func: F, waitFor: number) {
+  let timeout: ReturnType<typeof setTimeout> | null = null;
+  return (...args: Parameters<F>): void => {
+    if (timeout) clearTimeout(timeout);
+    timeout = setTimeout(() => func(...args), waitFor);
+  };
+}
+
 // Hours Breakdown Tooltip
 const HoursBreakdownTooltip: React.FC<{ breakdown?: Record<string, number> }> = ({ breakdown }) => {
     if (!breakdown) return null;
@@ -668,8 +677,8 @@ const TimeLogEntryRow: React.FC<{
     editorName: string;
     isNew: boolean;
     weekDays: Date[];
-    projectLogs: Record<string, number>;
-    onLogChange: (editorName: string, date: string, hours: number) => void;
+    projectLogs: Record<string, string>; // Values are now strings
+    onLogChange: (editorName: string, date: string, hoursString: string) => void;
     onEditorSelect: (oldName: string, newName: string) => void;
 }> = ({ editorName, isNew, weekDays, projectLogs, onLogChange, onEditorSelect }) => {
     const [selectedEditor, setSelectedEditor] = useState(editorName);
@@ -683,7 +692,7 @@ const TimeLogEntryRow: React.FC<{
             alert("Please select an editor first.");
             return;
         }
-        onLogChange(selectedEditor, date, parseFloat(value) || 0);
+        onLogChange(selectedEditor, date, value);
     };
 
     const handleEditorChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -709,12 +718,12 @@ const TimeLogEntryRow: React.FC<{
             </td>
             {weekDays.map(day => {
                 const dateStr = formatDate(day);
+                const total = Object.values(projectLogs).reduce((acc, h) => acc + (parseFloat(h) || 0), 0);
                 return (
                     <td key={dateStr} className="px-1 py-1">
                         <input
-                            type="number"
-                            step="0.1"
-                            min="0"
+                            type="text"
+                            inputMode="decimal"
                             value={projectLogs[dateStr] || ''}
                             onChange={e => handleHourChange(dateStr, e.target.value)}
                             className="w-full p-1.5 text-center rounded border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
@@ -725,7 +734,7 @@ const TimeLogEntryRow: React.FC<{
                 );
             })}
             <td className="px-2 py-2 font-semibold text-center text-gray-700">
-                {Object.values(projectLogs).reduce((acc, h) => acc + h, 0).toFixed(2)}
+                {Object.values(projectLogs).reduce((acc, h) => acc + (parseFloat(h) || 0), 0).toFixed(2)}
             </td>
         </tr>
     );
@@ -739,6 +748,7 @@ const ProjectTimeLogCard: React.FC<{
     onUpdateProjectField: (id: number, field: keyof Project, value: string | number | boolean) => void;
 }> = ({ project, allLogs, weekDays, selectedEditor, onUpdateProjectField }) => {
     const [isOpen, setIsOpen] = useState(false);
+    const cardRef = useRef<HTMLDivElement>(null);
     
     const projectLogsForWeek = useMemo(() => {
         const fromDate = formatDate(weekDays[0]);
@@ -756,53 +766,96 @@ const ProjectTimeLogCard: React.FC<{
         }, {} as Record<string, Record<string, number>>);
     }, [projectLogsForWeek]);
 
-    const debouncedSave = useCallback(
-      debounce((func: () => void) => {
-        func();
-      }, 750),
-      []
-    );
-
-    const handleLogChange = (editorName: string, date: string, hours: number) => {
-        debouncedSave(async () => {
-            const upsertData: ProductivityLog = {
-                project_id: project.id,
-                editor_name: editorName,
-                date,
-                hours_worked: hours
-            };
-            
-            if (hours > 0) {
-                 await supabase.from('productivity_logs').upsert(upsertData, { onConflict: 'editor_name,project_id,date' });
-            } else {
-                 await supabase.from('productivity_logs').delete().match({ project_id: project.id, editor_name: editorName, date });
+    // Local state for responsive inputs, using strings to avoid cursor jumping
+    const [localLogs, setLocalLogs] = useState<Record<string, Record<string, string>>>(() => {
+        const initial: Record<string, Record<string, string>> = {};
+        for (const editor in logsByEditor) {
+            initial[editor] = {};
+            for (const date in logsByEditor[editor]) {
+                initial[editor][date] = String(logsByEditor[editor][date]);
             }
+        }
+        return initial;
+    });
+    const [localRaw, setLocalRaw] = useState<string>(String(project.remaining_raw ?? ''));
 
-            const { data: allProjectLogs } = await supabase.from('productivity_logs').select('hours_worked').eq('project_id', project.id);
-            const newTotal = (allProjectLogs || []).reduce((sum, log) => sum + log.hours_worked, 0);
-            onUpdateProjectField(project.id, 'total_edited', newTotal);
+    // Sync local state with props, but ONLY if the user is not actively editing in this card.
+    useEffect(() => {
+        if (!cardRef.current?.contains(document.activeElement)) {
+            const newLogs: Record<string, Record<string, string>> = {};
+            for (const editor in logsByEditor) {
+                newLogs[editor] = {};
+                for (const date in logsByEditor[editor]) {
+                    newLogs[editor][date] = String(logsByEditor[editor][date]);
+                }
+            }
+            setLocalLogs(newLogs);
+        }
+    }, [logsByEditor]);
+
+    useEffect(() => {
+        if (!cardRef.current?.contains(document.activeElement)) {
+            setLocalRaw(String(project.remaining_raw ?? ''));
+        }
+    }, [project.remaining_raw]);
+
+    // Stable debounced functions using useRef to prevent re-creation on every render
+    const debouncedSaveLog = useRef(debounce(async (editorName: string, date: string, hours: number) => {
+        const upsertData: ProductivityLog = {
+            project_id: project.id,
+            editor_name: editorName,
+            date,
+            hours_worked: hours
+        };
+        
+        if (hours > 0) {
+            await supabase.from('productivity_logs').upsert(upsertData, { onConflict: 'editor_name,project_id,date' });
+        } else {
+            await supabase.from('productivity_logs').delete().match({ project_id: project.id, editor_name: editorName, date });
+        }
+
+        const { data: allProjectLogs } = await supabase.from('productivity_logs').select('hours_worked').eq('project_id', project.id);
+        const newTotal = (allProjectLogs || []).reduce((sum, log) => sum + log.hours_worked, 0);
+        onUpdateProjectField(project.id, 'total_edited', newTotal);
+    }, 750)).current;
+
+    const debouncedSaveRaw = useRef(debounce((value: number) => {
+        onUpdateProjectField(project.id, 'remaining_raw', value);
+    }, 750)).current;
+
+    const handleLogChange = (editorName: string, date: string, hoursString: string) => {
+        // Update local string state immediately for a responsive UI
+        setLocalLogs(prev => {
+            const newLogs = JSON.parse(JSON.stringify(prev)); // Deep copy for safety
+            if (!newLogs[editorName]) newLogs[editorName] = {};
+            newLogs[editorName][date] = hoursString;
+            return newLogs;
         });
+
+        const hours = parseFloat(hoursString);
+        if (!isNaN(hours)) {
+            debouncedSaveLog(editorName, date, hours);
+        } else if (hoursString === '' || hoursString === '.') {
+            debouncedSaveLog(editorName, date, 0);
+        }
     };
     
-    function debounce<F extends (...args: any[]) => any>(func: F, waitFor: number) {
-      let timeout: ReturnType<typeof setTimeout> | null = null;
-      return (...args: Parameters<F>): void => {
-        if (timeout) clearTimeout(timeout);
-        timeout = setTimeout(() => func(...args), waitFor);
-      };
-    }
-
     const handleRawUpdate = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const value = parseFloat(e.target.value) || 0;
-        debouncedSave(() => {
-            onUpdateProjectField(project.id, 'remaining_raw', value);
-        });
+        const value = e.target.value;
+        setLocalRaw(value); // Update local string state immediately
+        
+        const numericValue = parseFloat(value);
+        if (!isNaN(numericValue)) {
+            debouncedSaveRaw(numericValue);
+        } else if (value === '' || value === '.') {
+            debouncedSaveRaw(0);
+        }
     };
 
     const projectTotalForWeek = projectLogsForWeek.reduce((sum, log) => sum + log.hours_worked, 0);
 
     return (
-        <div className="bg-white rounded-lg shadow transition-shadow hover:shadow-md">
+        <div className="bg-white rounded-lg shadow transition-shadow hover:shadow-md" ref={cardRef}>
             <button onClick={() => setIsOpen(!isOpen)} className="w-full p-4 text-left flex justify-between items-center">
                 <div className="flex-1 min-w-0 pr-4">
                     <h3 className="font-bold text-lg text-gray-800 truncate" title={project.title}>{project.title}</h3>
@@ -820,9 +873,9 @@ const ProjectTimeLogCard: React.FC<{
                              <label htmlFor={`raw-${project.id}`} className="text-sm font-semibold text-indigo-800">Remaining RAW:</label>
                              <input
                                 id={`raw-${project.id}`}
-                                type="number"
-                                step="0.01"
-                                value={project.remaining_raw}
+                                type="text"
+                                inputMode="decimal"
+                                value={localRaw}
                                 onChange={handleRawUpdate}
                                 className="w-24 p-1.5 text-center rounded border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
                              />
@@ -837,13 +890,13 @@ const ProjectTimeLogCard: React.FC<{
                             </tr>
                         </thead>
                         <tbody>
-                            {Object.keys(logsByEditor).sort().map(editorName => (
+                            {Object.keys(localLogs).sort().map(editorName => (
                                 <TimeLogEntryRow 
                                     key={editorName}
                                     editorName={editorName}
                                     isNew={false}
                                     weekDays={weekDays}
-                                    projectLogs={logsByEditor[editorName]}
+                                    projectLogs={localLogs[editorName]}
                                     onLogChange={handleLogChange}
                                     onEditorSelect={()=>{}} // Not used for existing rows
                                 />
