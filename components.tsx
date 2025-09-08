@@ -9,7 +9,7 @@ const INLINE_INPUT_CLASS = "bg-transparent focus:bg-white w-full p-1 -m-1 rounde
 
 // --- ICON COMPONENTS ---
 export const PlusIcon: React.FC = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+    <svg xmlns="http://www.w.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
         <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
     </svg>
 );
@@ -38,8 +38,8 @@ const WarningIconYellow: React.FC = () => (
     </svg>
 );
 
-const TrashIcon: React.FC = () => (
-    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+const TrashIcon: React.FC<{className?: string}> = ({ className = "h-5 w-5" }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className} viewBox="0 0 20 20" fill="currentColor">
         <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" />
     </svg>
 );
@@ -263,6 +263,36 @@ export const DeleteConfirmationModal: React.FC<DeleteConfirmationModalProps> = (
         </div>
     </div>
 );
+
+// Delete Log Row Confirmation Modal
+interface DeleteLogRowConfirmationModalProps {
+    editorName: string;
+    projectName: string;
+    onConfirm: () => void;
+    onCancel: () => void;
+}
+export const DeleteLogRowConfirmationModal: React.FC<DeleteLogRowConfirmationModalProps> = ({ editorName, projectName, onConfirm, onCancel }) => (
+    <div className="fixed inset-0 bg-gray-600 bg-opacity-50 overflow-y-auto h-full w-full z-50 flex items-center justify-center">
+        <div className="relative mx-auto p-5 border w-full max-w-md shadow-lg rounded-md bg-white">
+            <div className="mt-3 text-center">
+                 <div className="mx-auto flex items-center justify-center h-12 w-12 rounded-full bg-red-100">
+                    <TrashIcon className="h-6 w-6 text-red-600" />
+                </div>
+                <h3 className="text-lg leading-6 font-medium text-gray-900 mt-2">Delete Time Logs</h3>
+                <div className="mt-2 px-7 py-3">
+                    <p className="text-sm text-gray-500">
+                        Are you sure you want to delete all of <strong>{editorName}</strong>'s logged hours for "<strong>{projectName}</strong>" for this week?
+                    </p>
+                </div>
+                <div className="items-center px-4 py-3 space-x-4">
+                    <button onClick={onCancel} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Cancel</button>
+                    <button onClick={onConfirm} className="px-4 py-2 bg-red-600 text-white rounded-md shadow-sm hover:bg-red-700">Confirm Delete</button>
+                </div>
+            </div>
+        </div>
+    </div>
+);
+
 
 // Due Date Display with Alerts
 interface DueDateDisplayProps {
@@ -680,7 +710,8 @@ const TimeLogEntryRow: React.FC<{
     projectLogs: Record<string, string>; // Values are now strings
     onLogChange: (editorName: string, date: string, hoursString: string) => void;
     onEditorSelect: (oldName: string, newName: string) => void;
-}> = ({ editorName, isNew, weekDays, projectLogs, onLogChange, onEditorSelect }) => {
+    onDeleteRow: (editorName: string) => void;
+}> = ({ editorName, isNew, weekDays, projectLogs, onLogChange, onEditorSelect, onDeleteRow }) => {
     const [selectedEditor, setSelectedEditor] = useState(editorName);
 
     const availableEditors = useMemo(() => {
@@ -718,7 +749,6 @@ const TimeLogEntryRow: React.FC<{
             </td>
             {weekDays.map(day => {
                 const dateStr = formatDate(day);
-                const total = Object.values(projectLogs).reduce((acc, h) => acc + (parseFloat(h) || 0), 0);
                 return (
                     <td key={dateStr} className="px-1 py-1">
                         <input
@@ -736,6 +766,17 @@ const TimeLogEntryRow: React.FC<{
             <td className="px-2 py-2 font-semibold text-center text-gray-700">
                 {Object.values(projectLogs).reduce((acc, h) => acc + (parseFloat(h) || 0), 0).toFixed(2)}
             </td>
+            <td className="px-2 py-2 text-center w-12">
+                {!isNew && (
+                    <button 
+                        onClick={() => onDeleteRow(editorName)} 
+                        className="p-1 text-gray-400 hover:text-red-600 rounded-full hover:bg-red-100 transition-colors"
+                        title={`Delete all logs for ${editorName} this week`}
+                    >
+                        <TrashIcon className="h-4 w-4" />
+                    </button>
+                )}
+            </td>
         </tr>
     );
 };
@@ -749,6 +790,7 @@ const ProjectTimeLogCard: React.FC<{
 }> = ({ project, allLogs, weekDays, selectedEditor, onUpdateProjectField }) => {
     const [isOpen, setIsOpen] = useState(false);
     const cardRef = useRef<HTMLDivElement>(null);
+    const [editorToDelete, setEditorToDelete] = useState<string | null>(null);
     
     const projectLogsForWeek = useMemo(() => {
         const fromDate = formatDate(weekDays[0]);
@@ -852,6 +894,35 @@ const ProjectTimeLogCard: React.FC<{
         }
     };
 
+    const handleDeleteRequest = (editorName: string) => {
+        setEditorToDelete(editorName);
+    };
+
+    const handleConfirmDeleteLogs = async () => {
+        if (!editorToDelete) return;
+
+        const fromDate = formatDate(weekDays[0]);
+        const toDate = formatDate(weekDays[4]);
+
+        const { error } = await supabase
+            .from('productivity_logs')
+            .delete()
+            .match({ project_id: project.id, editor_name: editorToDelete })
+            .gte('date', fromDate)
+            .lte('date', toDate);
+
+        if (error) {
+            alert(`Failed to delete logs: ${error.message}`);
+        } else {
+            // After deleting, refetch all logs for the project to recalculate total
+            const { data: allProjectLogs } = await supabase.from('productivity_logs').select('hours_worked').eq('project_id', project.id);
+            const newTotal = (allProjectLogs || []).reduce((sum, log) => sum + log.hours_worked, 0);
+            onUpdateProjectField(project.id, 'total_edited', newTotal);
+        }
+
+        setEditorToDelete(null); // Close the modal
+    };
+
     const projectTotalForWeek = projectLogsForWeek.reduce((sum, log) => sum + log.hours_worked, 0);
 
     return (
@@ -887,6 +958,7 @@ const ProjectTimeLogCard: React.FC<{
                                 <th className="px-2 py-3 text-left">Editor</th>
                                 {weekDays.map(day => <th key={day.toISOString()} className="px-1 py-3 text-center w-20">{day.toLocaleDateString('en-US', { weekday: 'short' })}</th>)}
                                 <th className="px-2 py-3 text-center">Total</th>
+                                <th className="px-2 py-3 text-center w-12"></th>
                             </tr>
                         </thead>
                         <tbody>
@@ -899,6 +971,7 @@ const ProjectTimeLogCard: React.FC<{
                                     projectLogs={localLogs[editorName]}
                                     onLogChange={handleLogChange}
                                     onEditorSelect={()=>{}} // Not used for existing rows
+                                    onDeleteRow={handleDeleteRequest}
                                 />
                             ))}
                             <TimeLogEntryRow 
@@ -908,10 +981,19 @@ const ProjectTimeLogCard: React.FC<{
                                 projectLogs={{}}
                                 onLogChange={handleLogChange}
                                 onEditorSelect={()=>{}} // Not used for new rows
+                                onDeleteRow={() => {}} // No delete on new row
                             />
                         </tbody>
                     </table>
                 </div>
+            )}
+            {editorToDelete && (
+                <DeleteLogRowConfirmationModal
+                    editorName={editorToDelete}
+                    projectName={project.title}
+                    onConfirm={handleConfirmDeleteLogs}
+                    onCancel={() => setEditorToDelete(null)}
+                />
             )}
         </div>
     );
