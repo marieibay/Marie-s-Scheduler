@@ -597,7 +597,7 @@ export const ClientView: React.FC<Omit<ViewProps, 'onDelete'>> = ({ projects, on
 export const EditorView: React.FC<Omit<ViewProps, 'onDelete'>> = ({ projects, onUpdate, productivityByProject }) => {
     const handleUpdate = (id: number, field: keyof Project, value: any) => onUpdate(id, field, value);
 
-    if (projects.length === 0) return <div className="text-center text-gray-500 py-10">No ongoing projects assigned.</div>;
+    if (projects.length === 0) return <div className="text-center text-gray-500 py-10">You have no ongoing projects assigned.</div>;
     
     return (
         <div className="bg-white rounded-lg shadow-md overflow-x-auto">
@@ -623,12 +623,12 @@ export const EditorView: React.FC<Omit<ViewProps, 'onDelete'>> = ({ projects, on
                                <DueDateDisplay due_date={project.due_date} original_due_date={project.original_due_date} onUpdate={(newDate) => handleUpdate(project.id, 'due_date', newDate)} isReadOnly={true} />
                             </td>
                             <td className="px-6 py-4 font-semibold">{project.editor}</td>
-                            <td className="px-6 py-4">{project.est_rt}</td>
-                            <td className="px-6 py-4 relative group">
+                            <td className="px-6 py-4 text-center">{project.est_rt}</td>
+                            <td className="px-6 py-4 relative group text-center">
                                 {project.total_edited}
                                 <HoursBreakdownTooltip breakdown={productivityByProject?.[project.id]} />
                             </td>
-                            <td className="px-6 py-4 font-semibold">{calculateWhatsLeft(project.est_rt, project.total_edited)}</td>
+                            <td className="px-6 py-4 font-semibold text-center">{calculateWhatsLeft(project.est_rt, project.total_edited)}</td>
                             <td className="px-6 py-4 w-32">
                                <input type="number" step="0.01" value={project.remaining_raw ?? ''} onChange={(e) => handleUpdate(project.id, 'remaining_raw', parseFloat(e.target.value) || 0)} className="w-full p-1 rounded border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"/>
                             </td>
@@ -664,189 +664,391 @@ const getWeekDays = (startOfWeek: Date): Date[] => {
   });
 };
 
-export const ProductivityLogger: React.FC<{ projects: Project[], editorName: string }> = ({ projects, editorName }) => {
+const TimeLogEntryRow: React.FC<{
+    editorName: string;
+    isNew: boolean;
+    weekDays: Date[];
+    projectLogs: Record<string, number>;
+    onLogChange: (editorName: string, date: string, hours: number) => void;
+    onEditorSelect: (oldName: string, newName: string) => void;
+}> = ({ editorName, isNew, weekDays, projectLogs, onLogChange, onEditorSelect }) => {
+    const [selectedEditor, setSelectedEditor] = useState(editorName);
+
+    const availableEditors = useMemo(() => {
+        return editors.sort();
+    }, []);
+    
+    const handleHourChange = (date: string, value: string) => {
+        if(!selectedEditor && isNew) {
+            alert("Please select an editor first.");
+            return;
+        }
+        onLogChange(selectedEditor, date, parseFloat(value) || 0);
+    };
+
+    const handleEditorChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+        const newEditor = e.target.value;
+        if(isNew) {
+            setSelectedEditor(newEditor);
+        } else {
+            onEditorSelect(selectedEditor, newEditor);
+        }
+    };
+    
+    return (
+         <tr className={isNew ? "bg-gray-50" : "bg-white"}>
+            <td className="px-2 py-2 w-1/4">
+                {isNew ? (
+                     <select value={selectedEditor} onChange={handleEditorChange} className="w-full p-1.5 border border-gray-300 rounded-md text-sm">
+                        <option value="">Select Editor...</option>
+                        {availableEditors.map(e => <option key={e} value={e}>{e}</option>)}
+                    </select>
+                ) : (
+                    <span className="font-semibold text-gray-800">{editorName}</span>
+                )}
+            </td>
+            {weekDays.map(day => {
+                const dateStr = formatDate(day);
+                return (
+                    <td key={dateStr} className="px-1 py-1">
+                        <input
+                            type="number"
+                            step="0.1"
+                            min="0"
+                            value={projectLogs[dateStr] || ''}
+                            onChange={e => handleHourChange(dateStr, e.target.value)}
+                            className="w-full p-1.5 text-center rounded border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                            placeholder="0"
+                            disabled={isNew && !selectedEditor}
+                        />
+                    </td>
+                );
+            })}
+            <td className="px-2 py-2 font-semibold text-center text-gray-700">
+                {Object.values(projectLogs).reduce((acc, h) => acc + h, 0).toFixed(2)}
+            </td>
+        </tr>
+    );
+};
+
+const ProjectTimeLogCard: React.FC<{
+    project: Project;
+    allLogs: ProductivityLog[];
+    weekDays: Date[];
+    selectedEditor: string;
+    onUpdateProjectField: (id: number, field: keyof Project, value: string | number | boolean) => void;
+}> = ({ project, allLogs, weekDays, selectedEditor, onUpdateProjectField }) => {
+    const [isOpen, setIsOpen] = useState(false);
+    
+    const projectLogsForWeek = useMemo(() => {
+        const fromDate = formatDate(weekDays[0]);
+        const toDate = formatDate(weekDays[4]);
+        return allLogs.filter(log => log.project_id === project.id && log.date >= fromDate && log.date <= toDate);
+    }, [allLogs, project.id, weekDays]);
+    
+    const logsByEditor = useMemo(() => {
+        return projectLogsForWeek.reduce((acc, log) => {
+            if (!acc[log.editor_name]) {
+                acc[log.editor_name] = {};
+            }
+            acc[log.editor_name][log.date] = log.hours_worked;
+            return acc;
+        }, {} as Record<string, Record<string, number>>);
+    }, [projectLogsForWeek]);
+
+    const debouncedSave = useCallback(
+      debounce((func: () => void) => {
+        func();
+      }, 750),
+      []
+    );
+
+    const handleLogChange = (editorName: string, date: string, hours: number) => {
+        debouncedSave(async () => {
+            const upsertData: ProductivityLog = {
+                project_id: project.id,
+                editor_name: editorName,
+                date,
+                hours_worked: hours
+            };
+            
+            if (hours > 0) {
+                 await supabase.from('productivity_logs').upsert(upsertData, { onConflict: 'editor_name,project_id,date' });
+            } else {
+                 await supabase.from('productivity_logs').delete().match({ project_id: project.id, editor_name: editorName, date });
+            }
+
+            const { data: allProjectLogs } = await supabase.from('productivity_logs').select('hours_worked').eq('project_id', project.id);
+            const newTotal = (allProjectLogs || []).reduce((sum, log) => sum + log.hours_worked, 0);
+            onUpdateProjectField(project.id, 'total_edited', newTotal);
+        });
+    };
+    
+    function debounce<F extends (...args: any[]) => any>(func: F, waitFor: number) {
+      let timeout: ReturnType<typeof setTimeout> | null = null;
+      return (...args: Parameters<F>): void => {
+        if (timeout) clearTimeout(timeout);
+        timeout = setTimeout(() => func(...args), waitFor);
+      };
+    }
+
+    const handleRawUpdate = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = parseFloat(e.target.value) || 0;
+        onUpdateProjectField(project.id, 'remaining_raw', value);
+    };
+
+    const projectTotalForWeek = projectLogsForWeek.reduce((sum, log) => sum + log.hours_worked, 0);
+
+    return (
+        <div className="bg-white rounded-lg shadow transition-shadow hover:shadow-md">
+            <button onClick={() => setIsOpen(!isOpen)} className="w-full p-4 text-left flex justify-between items-center">
+                <div className="flex-1 min-w-0 pr-4">
+                    <h3 className="font-bold text-lg text-gray-800 truncate" title={project.title}>{project.title}</h3>
+                    <p className="text-sm text-gray-500">Main Editor: {project.editor || 'Unassigned'}</p>
+                </div>
+                {project.editor === selectedEditor && (
+                    <div className="flex items-center gap-2 flex-shrink-0 mx-4">
+                         <label htmlFor={`raw-${project.id}`} className="text-sm font-medium text-gray-600">Remaining RAW:</label>
+                         <input
+                            id={`raw-${project.id}`}
+                            type="number"
+                            step="0.01"
+                            value={project.remaining_raw}
+                            onClick={(e) => e.stopPropagation()}
+                            onChange={handleRawUpdate}
+                            className="w-24 p-1.5 text-center rounded border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                         />
+                    </div>
+                )}
+                <div className="text-right flex-shrink-0">
+                    <span className="font-semibold text-indigo-600 text-xl">{projectTotalForWeek.toFixed(2)} hrs</span>
+                    <span className="text-sm text-gray-500 block">logged this week</span>
+                </div>
+            </button>
+            {isOpen && (
+                <div className="p-4 border-t border-gray-200">
+                     <table className="w-full text-sm">
+                        <thead className="text-xs text-gray-700 uppercase bg-gray-100">
+                             <tr>
+                                <th className="px-2 py-3 text-left">Editor</th>
+                                {weekDays.map(day => <th key={day.toISOString()} className="px-1 py-3 text-center w-20">{day.toLocaleDateString('en-US', { weekday: 'short' })}</th>)}
+                                <th className="px-2 py-3 text-center">Total</th>
+                            </tr>
+                        </thead>
+                        <tbody>
+                            {Object.keys(logsByEditor).sort().map(editorName => (
+                                <TimeLogEntryRow 
+                                    key={editorName}
+                                    editorName={editorName}
+                                    isNew={false}
+                                    weekDays={weekDays}
+                                    projectLogs={logsByEditor[editorName]}
+                                    onLogChange={handleLogChange}
+                                    onEditorSelect={()=>{}} // Not used for existing rows
+                                />
+                            ))}
+                            <TimeLogEntryRow 
+                                editorName=""
+                                isNew={true}
+                                weekDays={weekDays}
+                                projectLogs={{}}
+                                onLogChange={handleLogChange}
+                                onEditorSelect={()=>{}} // Not used for new rows
+                            />
+                        </tbody>
+                    </table>
+                </div>
+            )}
+        </div>
+    );
+};
+
+export const ProjectLoggerDashboard: React.FC<{
+    projects: Project[];
+    allLogs: ProductivityLog[];
+    selectedEditor: string;
+    onUpdateProjectField: (id: number, field: keyof Project, value: string | number | boolean) => void;
+}> = ({ projects, allLogs, selectedEditor, onUpdateProjectField }) => {
     const [currentDate, setCurrentDate] = useState(new Date());
-    const [weekLog, setWeekLog] = useState<Record<number, Record<string, number>>>({});
-    const [initialLog, setInitialLog] = useState<Record<number, Record<string, number>>>({});
-    const [isLoading, setIsLoading] = useState(false);
-    const [error, setError] = useState<string | null>(null);
 
     const startOfWeek = useMemo(() => getStartOfWeek(currentDate), [currentDate]);
     const weekDays = useMemo(() => getWeekDays(startOfWeek), [startOfWeek]);
 
-    useEffect(() => {
-        const fetchLogs = async () => {
-            if (!editorName) return;
-            setIsLoading(true);
-            const fromDate = formatDate(startOfWeek);
-            const toDate = formatDate(weekDays[weekDays.length - 1]);
-            const { data, error } = await supabase
-                .from('productivity_logs')
-                .select('*')
-                .eq('editor_name', editorName)
-                .gte('date', fromDate)
-                .lte('date', toDate);
-
-            if (error) {
-                setError(error.message);
-            } else {
-                const logs: Record<number, Record<string, number>> = {};
-                (data || []).forEach(log => {
-                    if (!logs[log.project_id]) logs[log.project_id] = {};
-                    logs[log.project_id][log.date] = log.hours_worked;
-                });
-                setWeekLog(logs);
-                setInitialLog(JSON.parse(JSON.stringify(logs))); // Deep copy for comparison
-            }
-            setIsLoading(false);
-        };
-        fetchLogs();
-    }, [editorName, startOfWeek]);
-
-    const handleHourChange = (projectId: number, date: string, hours: string) => {
-        const numericHours = parseFloat(hours) || 0;
-        setWeekLog(prev => ({
-            ...prev,
-            [projectId]: {
-                ...prev[projectId],
-                [date]: numericHours
-            }
-        }));
-    };
-
-    const handleSave = async () => {
-        setIsLoading(true);
-        setError(null);
-        const changedProjectIds = new Set<number>();
-        const upserts: ProductivityLog[] = [];
-        const deletes: { project_id: number, date: string }[] = [];
-
-        Object.keys(weekLog).forEach(projIdStr => {
-            const projectId = parseInt(projIdStr, 10);
-            const projectDates = weekLog[projectId];
-            Object.keys(projectDates).forEach(date => {
-                const hours = projectDates[date];
-                const initialHours = initialLog[projectId]?.[date] || 0;
-
-                if (hours !== initialHours) {
-                    changedProjectIds.add(projectId);
-                    if (hours > 0) {
-                        upserts.push({ project_id: projectId, editor_name: editorName, date, hours_worked: hours });
-                    } else if (initialHours > 0) {
-                        deletes.push({ project_id: projectId, date });
-                    }
-                }
-            });
-        });
-        
-        try {
-            if (upserts.length > 0) {
-                const { error: upsertError } = await supabase.from('productivity_logs').upsert(upserts, { onConflict: 'editor_name,project_id,date' });
-                if (upsertError) throw upsertError;
-            }
-            if (deletes.length > 0) {
-                for (const del of deletes) {
-                    const { error: deleteError } = await supabase.from('productivity_logs').delete().match({ editor_name: editorName, project_id: del.project_id, date: del.date });
-                    if (deleteError) throw deleteError;
-                }
-            }
-            
-            // Recalculate totals
-            for (const projectId of changedProjectIds) {
-                const { data: allLogs, error: sumError } = await supabase.from('productivity_logs').select('hours_worked').eq('project_id', projectId);
-                if (sumError) throw sumError;
-
-                const total_edited = allLogs.reduce((sum, log) => sum + log.hours_worked, 0);
-                const { error: updateError } = await supabase.from('projects').update({ total_edited }).eq('id', projectId);
-                if (updateError) throw updateError;
-            }
-
-            setInitialLog(JSON.parse(JSON.stringify(weekLog)));
-        } catch (e: any) {
-            setError(e.message);
-        } finally {
-            setIsLoading(false);
-        }
-    };
-    
     if (projects.length === 0) {
-        return <div className="text-center text-gray-500 py-10">You have no ongoing projects assigned.</div>;
+        return <div className="text-center text-gray-500 py-10">There are no ongoing projects to log time against.</div>;
     }
 
     return (
-        <div className="space-y-4">
-            <div className="flex justify-between items-center bg-gray-50 p-3 rounded-lg">
-                <button onClick={() => setCurrentDate(d => new Date(d.setDate(d.getDate() - 7)))} className="px-3 py-1 bg-white border rounded-md">&larr; Prev Week</button>
+         <div className="space-y-4">
+            <div className="flex justify-between items-center bg-gray-50 p-3 rounded-lg sticky top-0 z-10">
+                <button onClick={() => setCurrentDate(d => new Date(d.setDate(d.getDate() - 7)))} className="px-3 py-1 bg-white border rounded-md shadow-sm hover:bg-gray-100">&larr; Prev Week</button>
                 <h3 className="text-lg font-semibold">Week of {startOfWeek.toLocaleDateString()}</h3>
-                <button onClick={() => setCurrentDate(d => new Date(d.setDate(d.getDate() + 7)))} className="px-3 py-1 bg-white border rounded-md">Next Week &rarr;</button>
+                <button onClick={() => setCurrentDate(d => new Date(d.setDate(d.getDate() + 7)))} className="px-3 py-1 bg-white border rounded-md shadow-sm hover:bg-gray-100">Next Week &rarr;</button>
+            </div>
+            <div className="space-y-3">
+            {projects.map(project => (
+                <ProjectTimeLogCard
+                    key={project.id}
+                    project={project}
+                    allLogs={allLogs}
+                    weekDays={weekDays}
+                    selectedEditor={selectedEditor}
+                    onUpdateProjectField={onUpdateProjectField}
+                />
+            ))}
+            </div>
+        </div>
+    );
+}
+
+export const PersonalStatsView: React.FC<{ allLogs: ProductivityLog[]; selectedEditor: string; projects: Project[] }> = ({ allLogs, selectedEditor, projects }) => {
+    const [timeframe, setTimeframe] = useState<'week' | 'month' | 'today'>('week');
+    const [currentDate, setCurrentDate] = useState(new Date());
+
+    const projectMap = useMemo(() => 
+        projects.reduce((acc, p) => {
+            acc[p.id] = p.title;
+            return acc;
+        }, {} as Record<number, string>),
+    [projects]);
+
+    const { filteredLogs, dateRangeLabel } = useMemo(() => {
+        const now = new Date(currentDate);
+        now.setHours(0, 0, 0, 0);
+
+        let startDate: Date;
+        let endDate: Date;
+        let label: string;
+
+        switch (timeframe) {
+            case 'today':
+                startDate = new Date(now);
+                endDate = new Date(now);
+                label = now.toLocaleDateString();
+                break;
+            case 'month':
+                startDate = new Date(now.getFullYear(), now.getMonth(), 1);
+                endDate = new Date(now.getFullYear(), now.getMonth() + 1, 0);
+                label = `${startDate.toLocaleString('default', { month: 'long' })} ${startDate.getFullYear()}`;
+                break;
+            case 'week':
+            default:
+                startDate = getStartOfWeek(now);
+                endDate = new Date(startDate);
+                endDate.setDate(startDate.getDate() + 6);
+                label = `Week of ${startDate.toLocaleDateString()}`;
+                break;
+        }
+        
+        endDate.setHours(23, 59, 59, 999);
+
+        const startStr = formatDate(startDate);
+        const endStr = formatDate(endDate);
+
+        const logs = allLogs.filter(log =>
+            log.editor_name === selectedEditor &&
+            log.date >= startStr &&
+            log.date <= endStr
+        );
+
+        return { filteredLogs: logs, dateRangeLabel: label };
+    }, [allLogs, selectedEditor, timeframe, currentDate]);
+
+    const totalHours = useMemo(() =>
+        filteredLogs.reduce((sum, log) => sum + log.hours_worked, 0),
+    [filteredLogs]);
+
+    const projectBreakdown = useMemo(() => {
+        const breakdown = filteredLogs.reduce((acc, log) => {
+            const title = projectMap[log.project_id] || `Project ID: ${log.project_id}`;
+            acc[title] = (acc[title] || 0) + log.hours_worked;
+            return acc;
+        }, {} as Record<string, number>);
+        return Object.entries(breakdown).sort(([, hoursA], [, hoursB]) => hoursB - hoursA);
+    }, [filteredLogs, projectMap]);
+    
+    const handleDateChange = (direction: 'prev' | 'next') => {
+        const d = new Date(currentDate);
+        const increment = direction === 'next' ? 1 : -1;
+        if (timeframe === 'week') d.setDate(d.getDate() + (7 * increment));
+        else if (timeframe === 'month') d.setMonth(d.getMonth() + increment);
+        else d.setDate(d.getDate() + increment);
+        setCurrentDate(d);
+    };
+
+    return (
+        <div className="space-y-6">
+             <div className="flex flex-col sm:flex-row justify-between items-center bg-gray-50 p-3 rounded-lg gap-4">
+                <div className="flex items-center gap-2">
+                    <button onClick={() => setTimeframe('today')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${timeframe === 'today' ? 'bg-indigo-600 text-white shadow' : 'bg-white text-gray-600 hover:bg-gray-200 border'}`}>Today</button>
+                    <button onClick={() => setTimeframe('week')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${timeframe === 'week' ? 'bg-indigo-600 text-white shadow' : 'bg-white text-gray-600 hover:bg-gray-200 border'}`}>This Week</button>
+                    <button onClick={() => setTimeframe('month')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${timeframe === 'month' ? 'bg-indigo-600 text-white shadow' : 'bg-white text-gray-600 hover:bg-gray-200 border'}`}>This Month</button>
+                </div>
+                <div className="flex items-center gap-4">
+                    <button onClick={() => handleDateChange('prev')} className="px-3 py-1 bg-white border rounded-md shadow-sm hover:bg-gray-100">&larr; Prev</button>
+                    <h3 className="text-lg font-semibold text-center">{dateRangeLabel}</h3>
+                    <button onClick={() => handleDateChange('next')} className="px-3 py-1 bg-white border rounded-md shadow-sm hover:bg-gray-100">Next &rarr;</button>
+                </div>
             </div>
             
-            <div className="overflow-x-auto">
-                <table className="w-full text-sm text-left text-gray-500">
-                    <thead className="text-xs text-gray-700 uppercase bg-gray-100">
-                        <tr>
-                            <th className="px-4 py-3 min-w-[250px]">Project</th>
-                            {weekDays.map(day => <th key={day.toISOString()} className="px-4 py-3 w-28 text-center">{day.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' })}</th>)}
-                            <th className="px-4 py-3 w-32 text-center">Weekly Total</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {projects.map(project => {
-                            const weeklyTotal = weekDays.reduce((acc, day) => acc + (weekLog[project.id]?.[formatDate(day)] || 0), 0);
-                            return (
-                                <tr key={project.id} className="bg-white border-b hover:bg-gray-50">
-                                    <td className="px-4 py-2 font-medium text-gray-900">{project.title}</td>
-                                    {weekDays.map(day => (
-                                        <td key={day.toISOString()} className="px-2 py-1">
-                                            <input 
-                                                type="number" 
-                                                step="0.1" 
-                                                min="0"
-                                                value={weekLog[project.id]?.[formatDate(day)] || ''}
-                                                onChange={e => handleHourChange(project.id, formatDate(day), e.target.value)}
-                                                className="w-full p-1 text-center rounded border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                                                placeholder="0"
-                                            />
-                                        </td>
-                                    ))}
-                                    <td className="px-4 py-2 font-semibold text-center">{weeklyTotal.toFixed(2)}</td>
-                                </tr>
-                            )
-                        })}
-                    </tbody>
-                </table>
-            </div>
-
-            <div className="flex justify-end items-center gap-4 mt-4">
-                {error && <p className="text-red-500 text-sm">Error: {error}</p>}
-                <button onClick={handleSave} disabled={isLoading} className="px-6 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 disabled:bg-indigo-300">
-                    {isLoading ? 'Saving...' : 'Save Changes'}
-                </button>
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6">
+                <div className="md:col-span-1 bg-white p-6 rounded-lg shadow-md flex flex-col justify-center items-center">
+                    <p className="text-gray-500 text-lg">Total Hours Logged</p>
+                    <p className="text-5xl font-bold text-indigo-600">{totalHours.toFixed(2)}</p>
+                </div>
+                <div className="md:col-span-2 bg-white p-6 rounded-lg shadow-md">
+                    <h4 className="text-xl font-bold mb-4 border-b pb-2">Project Breakdown</h4>
+                    {projectBreakdown.length > 0 ? (
+                         <ul className="space-y-2 max-h-60 overflow-y-auto">
+                            {projectBreakdown.map(([title, hours]) => (
+                                <li key={title} className="flex justify-between items-center text-sm p-2 rounded-md hover:bg-gray-50">
+                                    <span className="font-medium text-gray-700">{title}</span>
+                                    <span className="font-bold text-gray-900">{hours.toFixed(2)} hrs</span>
+                                </li>
+                            ))}
+                        </ul>
+                    ) : (
+                        <p className="text-gray-500 text-center py-8">No hours logged for this period.</p>
+                    )}
+                </div>
             </div>
         </div>
     );
 };
 
+
 export const TeamProductivityView: React.FC = () => {
     const [currentDate, setCurrentDate] = useState(new Date());
     const [teamLogs, setTeamLogs] = useState<Record<string, number>>({});
-    const [isLoading, setIsLoading] = useState(false);
+    const [viewMode, setViewMode] = useState<'week' | 'month'>('week');
 
-    const startOfWeek = useMemo(() => getStartOfWeek(currentDate), [currentDate]);
-    const endOfWeek = useMemo(() => {
-        const end = new Date(startOfWeek);
-        end.setDate(startOfWeek.getDate() + 4);
-        return end;
-    }, [startOfWeek]);
+    const { dateRange, label } = useMemo(() => {
+        const d = new Date(currentDate);
+        if (viewMode === 'week') {
+            const start = getStartOfWeek(d);
+            const end = new Date(start);
+            end.setDate(start.getDate() + 6); // Full week for logs
+            return {
+                dateRange: { start, end },
+                label: `Week of ${start.toLocaleDateString()}`
+            };
+        } else { // month
+            const start = new Date(d.getFullYear(), d.getMonth(), 1);
+            const end = new Date(d.getFullYear(), d.getMonth() + 1, 0);
+            return {
+                dateRange: { start, end },
+                label: `${start.toLocaleString('default', { month: 'long' })} ${start.getFullYear()}`
+            }
+        }
+    }, [currentDate, viewMode]);
 
     useEffect(() => {
         const fetchLogs = async () => {
-            setIsLoading(true);
-            const { data, error } = await supabase
+            const { data } = await supabase
                 .from('productivity_logs')
                 .select('editor_name, hours_worked')
-                .gte('date', formatDate(startOfWeek))
-                .lte('date', formatDate(endOfWeek));
+                .gte('date', formatDate(dateRange.start))
+                .lte('date', formatDate(dateRange.end));
             
             if (data) {
                 const summary = data.reduce((acc, log) => {
@@ -855,19 +1057,32 @@ export const TeamProductivityView: React.FC = () => {
                 }, {} as Record<string, number>);
                 setTeamLogs(summary);
             }
-            setIsLoading(false);
         };
         fetchLogs();
-    }, [startOfWeek]);
+    }, [dateRange]);
+    
+    const handleDateChange = (direction: 'prev' | 'next') => {
+        const d = new Date(currentDate);
+        const increment = direction === 'next' ? 1 : -1;
+        if (viewMode === 'week') d.setDate(d.getDate() + (7 * increment));
+        else d.setMonth(d.getMonth() + increment);
+        setCurrentDate(d);
+    };
 
     const sortedEditors = useMemo(() => editors.sort((a,b) => (teamLogs[b] || 0) - (teamLogs[a] || 0)), [teamLogs]);
 
     return (
         <div className="space-y-4">
-            <div className="flex justify-between items-center bg-gray-50 p-3 rounded-lg">
-                <button onClick={() => setCurrentDate(d => new Date(d.setDate(d.getDate() - 7)))} className="px-3 py-1 bg-white border rounded-md">&larr; Prev Week</button>
-                <h3 className="text-lg font-semibold">Week of {startOfWeek.toLocaleDateString()}</h3>
-                <button onClick={() => setCurrentDate(d => new Date(d.setDate(d.getDate() + 7)))} className="px-3 py-1 bg-white border rounded-md">Next Week &rarr;</button>
+            <div className="flex flex-col sm:flex-row justify-between items-center bg-gray-50 p-3 rounded-lg gap-4">
+                 <div className="flex items-center gap-2">
+                    <button onClick={() => setViewMode('week')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${viewMode === 'week' ? 'bg-indigo-600 text-white shadow' : 'bg-white text-gray-600 hover:bg-gray-200 border'}`}>Weekly</button>
+                    <button onClick={() => setViewMode('month')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${viewMode === 'month' ? 'bg-indigo-600 text-white shadow' : 'bg-white text-gray-600 hover:bg-gray-200 border'}`}>Monthly</button>
+                </div>
+                <div className="flex items-center gap-4">
+                    <button onClick={() => handleDateChange('prev')} className="px-3 py-1 bg-white border rounded-md shadow-sm hover:bg-gray-100">&larr; Prev</button>
+                    <h3 className="text-lg font-semibold text-center">{label}</h3>
+                    <button onClick={() => handleDateChange('next')} className="px-3 py-1 bg-white border rounded-md shadow-sm hover:bg-gray-100">Next &rarr;</button>
+                </div>
             </div>
              <div className="bg-white rounded-lg shadow-md overflow-x-auto">
                 <table className="w-full text-sm text-left text-gray-500">
@@ -881,7 +1096,7 @@ export const TeamProductivityView: React.FC = () => {
                         {sortedEditors.map(editor => (
                             <tr key={editor} className="bg-white border-b hover:bg-gray-50">
                                 <td className="px-6 py-4 font-semibold text-gray-900">{editor}</td>
-                                <td className="px-6 py-4">{(teamLogs[editor] || 0).toFixed(2)}</td>
+                                <td className="px-6 py-4 font-bold text-lg">{(teamLogs[editor] || 0).toFixed(2)}</td>
                             </tr>
                         ))}
                     </tbody>

@@ -9,8 +9,9 @@ import {
     PlusIcon,
     DailyNotesWidget,
     MemoIcon,
-    ProductivityLogger,
+    ProjectLoggerDashboard,
     TeamProductivityView,
+    PersonalStatsView,
 } from './components';
 import { getClientName } from './utils';
 import { ProjectCard } from './components';
@@ -21,8 +22,9 @@ import { editors } from './employees';
 
 const EditorDashboard: React.FC<{
     projects: Project[]; 
+    productivityLogs: ProductivityLog[];
     onUpdateProjectField: (id: number, field: keyof Project, value: string | number | boolean) => void;
-}> = ({ projects, onUpdateProjectField }) => {
+}> = ({ projects, productivityLogs, onUpdateProjectField }) => {
     const [activeTab, setActiveTab] = useState('logHours');
     const [selectedEditor, setSelectedEditor] = useState<string>(() => {
         return localStorage.getItem('selectedEditor') || (editors.length > 0 ? editors[0] : '');
@@ -71,10 +73,13 @@ const EditorDashboard: React.FC<{
         <div className="border-b border-gray-200 mb-6">
             <nav className="-mb-px flex space-x-6" aria-label="Tabs">
                 <button onClick={() => setActiveTab('logHours')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'logHours' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
-                    Log Weekly Hours
+                    Log Project Hours
                 </button>
                 <button onClick={() => setActiveTab('myProjects')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'myProjects' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
                     My Open Projects
+                </button>
+                 <button onClick={() => setActiveTab('myStats')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'myStats' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
+                    My Stats
                 </button>
                 <button onClick={() => setActiveTab('teamProductivity')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'teamProductivity' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
                     Team Productivity
@@ -84,7 +89,8 @@ const EditorDashboard: React.FC<{
 
         <main>
             {activeTab === 'myProjects' && <EditorView projects={assignedProjects} onUpdate={onUpdateProjectField} />}
-            {activeTab === 'logHours' && <ProductivityLogger projects={allOngoingProjects} editorName={selectedEditor} />}
+            {activeTab === 'logHours' && <ProjectLoggerDashboard projects={allOngoingProjects} allLogs={productivityLogs} selectedEditor={selectedEditor} onUpdateProjectField={onUpdateProjectField} />}
+            {activeTab === 'myStats' && <PersonalStatsView allLogs={productivityLogs} selectedEditor={selectedEditor} projects={projects} />}
             {activeTab === 'teamProductivity' && <TeamProductivityView />}
         </main>
       </div>
@@ -637,7 +643,7 @@ const App: React.FC = () => {
     }
 
     if (route === '/editor' || route === '/editor.html') {
-        return <EditorDashboard projects={projects} onUpdateProjectField={handleUpdateProjectField} />;
+        return <EditorDashboard projects={projects} productivityLogs={productivityLogs} onUpdateProjectField={handleUpdateProjectField} />;
     }
     return <ManagerDashboard projects={projects} dailyNotesContent={dailyNotesContent} onAddProject={handleAddNewProject} onUpdateProject={handleUpdateProjectField} onNotesChange={handleNotesChange} isNewEditColumnMissing={isNewEditColumnMissing} isLoading={isLoading} productivityByProject={productivityByProject} />;
 };
