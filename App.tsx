@@ -42,6 +42,12 @@ const EditorDashboard: React.FC<{
             return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
           });
     }, [projects, selectedEditor]);
+
+    const allOngoingProjects = useMemo(() => {
+        return [...projects]
+            .filter(p => p.status === 'ongoing')
+            .sort((a, b) => a.title.localeCompare(b.title));
+    }, [projects]);
     
     return (
       <div className="container mx-auto p-4 md:p-8">
@@ -79,7 +85,7 @@ const EditorDashboard: React.FC<{
 
         <main>
             {activeTab === 'myProjects' && <EditorView projects={assignedProjects} onUpdate={onUpdateProjectField} />}
-            {activeTab === 'logHours' && <ProductivityLogger projects={assignedProjects} editorName={selectedEditor} />}
+            {activeTab === 'logHours' && <ProductivityLogger projects={allOngoingProjects} editorName={selectedEditor} />}
             {activeTab === 'teamProductivity' && <TeamProductivityView />}
         </main>
       </div>
