@@ -21,3 +21,11 @@ export interface Project {
 }
 
 export type ViewMode = 'manager' | 'editor' | 'client';
+
+export interface ProductivityLog {
+  id?: number;
+  editor_name: string;
+  project_id: number;
+  date: string; // YYYY-MM-DD
+  hours_worked: number;
+}

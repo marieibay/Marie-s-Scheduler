@@ -1,8 +1,9 @@
 
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
-import { Project } from './types';
+import { Project, ProductivityLog } from './types';
 import { editors, masters, qcPersonnel } from './employees';
 import { getClientName, calculateWhatsLeft } from './utils';
+import { supabase } from './supabaseClient';
 
 // --- STYLING CONSTANTS ---
 const INLINE_INPUT_CLASS = "bg-transparent focus:bg-white w-full p-1 -m-1 rounded focus:outline-none focus:ring-1 focus:ring-indigo-500 transition-colors duration-200";
@@ -57,6 +58,12 @@ const StrikethroughIcon: React.FC = () => (
     <path d="M4 10H16" />
     <path d="M8.5 4.5S6.5 6.5 6.5 8c0 1.5 2 1.5 3.5 2.5s2.5 1.5 2.5 3c0 1.5-2 1.5-3.5 0.5" />
   </svg>
+);
+
+const CalendarIcon: React.FC<{ className?: string }> = ({ className }) => (
+    <svg xmlns="http://www.w3.org/2000/svg" className={className || "h-5 w-5"} fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
+        <path strokeLinecap="round" strokeLinejoin="round" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" />
+    </svg>
 );
 
 
@@ -228,15 +235,38 @@ export const DeleteConfirmationModal: React.FC<DeleteConfirmationModalProps> = (
 interface DueDateDisplayProps {
     due_date: string | null;
     original_due_date: string | null;
-    onUpdate: (newDate: string) => void;
+    onUpdate: (newDate: string | null) => void;
     isReadOnly?: boolean;
 }
 
 export const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ due_date, original_due_date, onUpdate, isReadOnly = false }) => {
     const [isEditing, setIsEditing] = useState(false);
+    const [inputValue, setInputValue] = useState('');
+    const textInputRef = useRef<HTMLInputElement>(null);
     const dateInputRef = useRef<HTMLInputElement>(null);
 
-    useEffect(() => { if (isEditing) dateInputRef.current?.focus(); }, [isEditing]);
+    const formatDateForDisplay = (dateStr: string | null): string => {
+        if (!dateStr) return 'MM/DD/YYYY';
+        const date = new Date(dateStr + 'T00:00:00');
+        if (isNaN(date.getTime())) return 'MM/DD/YYYY';
+        const month = String(date.getMonth() + 1).padStart(2, '0');
+        const day = String(date.getDate()).padStart(2, '0');
+        const year = String(date.getFullYear());
+        return `${month}/${day}/${year}`;
+    };
+
+    const formatDateForNativePicker = (dateStr: string | null): string => {
+        return dateStr || '';
+    };
+
+    useEffect(() => {
+        if (isEditing) {
+            const formatted = formatDateForDisplay(due_date);
+            setInputValue(formatted === 'MM/DD/YYYY' ? '' : formatted);
+            textInputRef.current?.focus();
+            textInputRef.current?.select();
+        }
+    }, [isEditing, due_date]);
 
     const handleDisplayClick = (e: React.MouseEvent) => {
         if (isReadOnly) return;
@@ -244,10 +274,48 @@ export const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ due_date, origin
         setIsEditing(true);
     };
 
-    const handleInputBlur = () => setIsEditing(false);
-    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => onUpdate(e.target.value);
+    const saveDate = () => {
+        setIsEditing(false);
+        if (!inputValue.trim()) {
+            if (due_date !== null) onUpdate(null);
+            return;
+        }
+
+        const parts = inputValue.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+        if (parts) {
+            const month = parseInt(parts[1], 10);
+            const day = parseInt(parts[2], 10);
+            const year = parseInt(parts[3], 10);
+            if (month < 1 || month > 12 || day < 1 || day > 31) return;
+            
+            const date = new Date(year, month - 1, day);
+            if (!isNaN(date.getTime()) && date.getFullYear() === year && date.getMonth() + 1 === month && date.getDate() === day) {
+                const yyyy = date.getFullYear();
+                const mm = String(date.getMonth() + 1).padStart(2, '0');
+                const dd = String(date.getDate()).padStart(2, '0');
+                const newDateString = `${yyyy}-${mm}-${dd}`;
+                if (newDateString !== due_date) onUpdate(newDateString);
+            }
+        }
+    };
+    
+    const handleInputBlur = () => saveDate();
+    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => setInputValue(e.target.value);
     const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Enter' || e.key === 'Escape') setIsEditing(false);
+        if (e.key === 'Enter') { e.preventDefault(); saveDate(); }
+        else if (e.key === 'Escape') setIsEditing(false);
+    };
+    
+    const handleNativeDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const newDate = e.target.value;
+        onUpdate(newDate || null);
+        if (newDate) setInputValue(formatDateForDisplay(newDate));
+        else setInputValue('');
+    };
+    
+    const showPicker = () => {
+        try { dateInputRef.current?.showPicker(); }
+        catch (error) { console.error("showPicker() is not supported by this browser.", error); }
     };
 
     const alertIcon = useMemo(() => {
@@ -263,16 +331,7 @@ export const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ due_date, origin
         return null;
     }, [due_date]);
     
-    const formattedDate = useMemo(() => {
-        if (!due_date) return 'MM/DD/YY';
-        const date = new Date(due_date + 'T00:00:00');
-        if (isNaN(date.getTime())) return 'MM/DD/YY';
-        const month = String(date.getMonth() + 1).padStart(2, '0');
-        const day = String(date.getDate()).padStart(2, '0');
-        const year = String(date.getFullYear()).slice(-2);
-        return `${month}/${day}/${year}`;
-    }, [due_date]);
-    
+    const formattedDate = useMemo(() => formatDateForDisplay(due_date), [due_date]);
     const isUpdated = original_due_date && due_date !== original_due_date;
     const interactionClasses = isReadOnly ? '' : 'cursor-pointer group';
     const hoverTextClass = isReadOnly ? '' : 'group-hover:text-red-700';
@@ -281,7 +340,37 @@ export const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ due_date, origin
         return (
             <div className="relative flex items-center gap-2" style={{ height: '28px' }}>
                  <span className="text-sm text-gray-600">Due:</span>
-                 <input ref={dateInputRef} type="date" value={due_date || ''} onChange={handleInputChange} onBlur={handleInputBlur} onKeyDown={handleInputKeyDown} className="p-1 border border-indigo-400 rounded-md shadow-sm"/>
+                 <div className="relative">
+                     <input
+                        ref={textInputRef}
+                        type="text"
+                        value={inputValue}
+                        onChange={handleInputChange}
+                        onBlur={handleInputBlur}
+                        onKeyDown={handleInputKeyDown}
+                        placeholder="MM/DD/YYYY"
+                        className="p-1 border border-indigo-400 rounded-md shadow-sm w-[120px] pr-8"
+                        aria-label="Due date text input"
+                     />
+                     <button 
+                        type="button" 
+                        onClick={showPicker}
+                        className="absolute right-0 top-0 h-full px-2 text-gray-500 hover:text-indigo-600"
+                        aria-label="Open date picker"
+                        title="Open date picker"
+                    >
+                         <CalendarIcon className="h-5 w-5" />
+                     </button>
+                 </div>
+                 <input
+                    ref={dateInputRef}
+                    type="date"
+                    value={formatDateForNativePicker(due_date)}
+                    onChange={handleNativeDateChange}
+                    className="absolute w-0 h-0 -z-10 opacity-0 pointer-events-none"
+                    tabIndex={-1}
+                    aria-hidden="true"
+                 />
             </div>
         );
     }
@@ -297,12 +386,13 @@ export const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ due_date, origin
           style={{ height: '28px' }}
         >
             <span className="text-sm text-gray-600">Due:</span>
-            <span className={`font-bold text-lg w-[85px] transition-colors ${!due_date ? 'text-gray-400' : 'text-red-600'} ${hoverTextClass}`}>{formattedDate}</span>
+            <span className={`font-bold text-lg w-[100px] transition-colors ${!due_date ? 'text-gray-400' : 'text-red-600'} ${hoverTextClass}`}>{formattedDate}</span>
             <div className="w-5 h-5 flex items-center justify-center">{alertIcon}</div>
             {isUpdated && <span className="px-2 py-0.5 text-xs font-semibold text-blue-800 bg-blue-100 rounded-full">UPDATED</span>}
         </div>
     );
 };
+
 
 // Autocomplete Select Input
 interface SelectInputProps { value: string; onChange: (newValue: string) => void; options: string[]; placeholder?: string; className?: string; }
@@ -428,7 +518,7 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onD
                             <p className="text-xs text-blue-600 mt-1">EST RT</p>
                         </div>
                         <div className="bg-yellow-50 p-2 rounded-lg w-24 text-center">
-                            {isClientView ? <p className="font-bold text-lg text-yellow-800 text-center h-9 flex items-center justify-center">{project.total_edited || 0}</p> : <input type="number" step="0.01" value={project.total_edited || 0} onChange={(e) => handleUpdate('total_edited', parseFloat(e.target.value) || 0)} className={`font-bold text-lg text-yellow-800 text-center h-9 ${INLINE_INPUT_CLASS}`}/>}
+                            <p className="font-bold text-lg text-yellow-800 text-center h-9 flex items-center justify-center">{project.total_edited || 0}</p>
                             <p className="text-xs text-yellow-600 mt-1">Edited</p>
                         </div>
                         <div className="bg-green-50 p-2 rounded-lg w-24 text-center">
@@ -507,9 +597,7 @@ export const EditorView: React.FC<Omit<ViewProps, 'onDelete'>> = ({ projects, on
                             </td>
                             <td className="px-6 py-4 font-semibold">{project.editor}</td>
                             <td className="px-6 py-4">{project.est_rt}</td>
-                            <td className="px-6 py-4 w-32">
-                               <input type="number" step="0.01" value={project.total_edited ?? ''} onChange={(e) => handleUpdate(project.id, 'total_edited', parseFloat(e.target.value) || 0)} className="w-full p-1 rounded border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"/>
-                            </td>
+                            <td className="px-6 py-4">{project.total_edited}</td>
                             <td className="px-6 py-4 font-semibold">{calculateWhatsLeft(project.est_rt, project.total_edited)}</td>
                             <td className="px-6 py-4 w-32">
                                <input type="number" step="0.01" value={project.remaining_raw ?? ''} onChange={(e) => handleUpdate(project.id, 'remaining_raw', parseFloat(e.target.value) || 0)} className="w-full p-1 rounded border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"/>
@@ -520,4 +608,255 @@ export const EditorView: React.FC<Omit<ViewProps, 'onDelete'>> = ({ projects, on
             </table>
         </div>
     );
+};
+
+
+// --- PRODUCTIVITY COMPONENTS ---
+
+// Date utilities
+const getStartOfWeek = (date: Date): Date => {
+  const d = new Date(date);
+  d.setHours(0, 0, 0, 0);
+  const day = d.getDay();
+  const diff = d.getDate() - day + (day === 0 ? -6 : 1); // adjust when day is sunday
+  return new Date(d.setDate(diff));
+};
+
+const formatDate = (date: Date): string => {
+  return date.toISOString().split('T')[0];
+};
+
+const getWeekDays = (startOfWeek: Date): Date[] => {
+  return Array.from({ length: 5 }).map((_, i) => {
+    const date = new Date(startOfWeek);
+    date.setDate(startOfWeek.getDate() + i);
+    return date;
+  });
+};
+
+export const ProductivityLogger: React.FC<{ projects: Project[], editorName: string }> = ({ projects, editorName }) => {
+    const [currentDate, setCurrentDate] = useState(new Date());
+    const [weekLog, setWeekLog] = useState<Record<number, Record<string, number>>>({});
+    const [initialLog, setInitialLog] = useState<Record<number, Record<string, number>>>({});
+    const [isLoading, setIsLoading] = useState(false);
+    const [error, setError] = useState<string | null>(null);
+
+    const startOfWeek = useMemo(() => getStartOfWeek(currentDate), [currentDate]);
+    const weekDays = useMemo(() => getWeekDays(startOfWeek), [startOfWeek]);
+
+    useEffect(() => {
+        const fetchLogs = async () => {
+            if (!editorName) return;
+            setIsLoading(true);
+            const fromDate = formatDate(startOfWeek);
+            const toDate = formatDate(weekDays[weekDays.length - 1]);
+            const { data, error } = await supabase
+                .from('productivity_logs')
+                .select('*')
+                .eq('editor_name', editorName)
+                .gte('date', fromDate)
+                .lte('date', toDate);
+
+            if (error) {
+                setError(error.message);
+            } else {
+                const logs: Record<number, Record<string, number>> = {};
+                (data || []).forEach(log => {
+                    if (!logs[log.project_id]) logs[log.project_id] = {};
+                    logs[log.project_id][log.date] = log.hours_worked;
+                });
+                setWeekLog(logs);
+                setInitialLog(JSON.parse(JSON.stringify(logs))); // Deep copy for comparison
+            }
+            setIsLoading(false);
+        };
+        fetchLogs();
+    }, [editorName, startOfWeek]);
+
+    const handleHourChange = (projectId: number, date: string, hours: string) => {
+        const numericHours = parseFloat(hours) || 0;
+        setWeekLog(prev => ({
+            ...prev,
+            [projectId]: {
+                ...prev[projectId],
+                [date]: numericHours
+            }
+        }));
+    };
+
+    const handleSave = async () => {
+        setIsLoading(true);
+        setError(null);
+        const changedProjectIds = new Set<number>();
+        const upserts: ProductivityLog[] = [];
+        const deletes: { project_id: number, date: string }[] = [];
+
+        Object.keys(weekLog).forEach(projIdStr => {
+            const projectId = parseInt(projIdStr, 10);
+            const projectDates = weekLog[projectId];
+            Object.keys(projectDates).forEach(date => {
+                const hours = projectDates[date];
+                const initialHours = initialLog[projectId]?.[date] || 0;
+
+                if (hours !== initialHours) {
+                    changedProjectIds.add(projectId);
+                    if (hours > 0) {
+                        upserts.push({ project_id: projectId, editor_name: editorName, date, hours_worked: hours });
+                    } else if (initialHours > 0) {
+                        deletes.push({ project_id: projectId, date });
+                    }
+                }
+            });
+        });
+        
+        try {
+            if (upserts.length > 0) {
+                const { error: upsertError } = await supabase.from('productivity_logs').upsert(upserts, { onConflict: 'editor_name,project_id,date' });
+                if (upsertError) throw upsertError;
+            }
+            if (deletes.length > 0) {
+                for (const del of deletes) {
+                    const { error: deleteError } = await supabase.from('productivity_logs').delete().match({ editor_name: editorName, project_id: del.project_id, date: del.date });
+                    if (deleteError) throw deleteError;
+                }
+            }
+            
+            // Recalculate totals
+            for (const projectId of changedProjectIds) {
+                const { data: allLogs, error: sumError } = await supabase.from('productivity_logs').select('hours_worked').eq('project_id', projectId);
+                if (sumError) throw sumError;
+
+                const total_edited = allLogs.reduce((sum, log) => sum + log.hours_worked, 0);
+                const { error: updateError } = await supabase.from('projects').update({ total_edited }).eq('id', projectId);
+                if (updateError) throw updateError;
+            }
+
+            setInitialLog(JSON.parse(JSON.stringify(weekLog)));
+        } catch (e: any) {
+            setError(e.message);
+        } finally {
+            setIsLoading(false);
+        }
+    };
+    
+    if (projects.length === 0) {
+        return <div className="text-center text-gray-500 py-10">You have no ongoing projects assigned.</div>;
+    }
+
+    return (
+        <div className="space-y-4">
+            <div className="flex justify-between items-center bg-gray-50 p-3 rounded-lg">
+                <button onClick={() => setCurrentDate(d => new Date(d.setDate(d.getDate() - 7)))} className="px-3 py-1 bg-white border rounded-md">&larr; Prev Week</button>
+                <h3 className="text-lg font-semibold">Week of {startOfWeek.toLocaleDateString()}</h3>
+                <button onClick={() => setCurrentDate(d => new Date(d.setDate(d.getDate() + 7)))} className="px-3 py-1 bg-white border rounded-md">Next Week &rarr;</button>
+            </div>
+            
+            <div className="overflow-x-auto">
+                <table className="w-full text-sm text-left text-gray-500">
+                    <thead className="text-xs text-gray-700 uppercase bg-gray-100">
+                        <tr>
+                            <th className="px-4 py-3 min-w-[250px]">Project</th>
+                            {weekDays.map(day => <th key={day.toISOString()} className="px-4 py-3 w-28 text-center">{day.toLocaleDateString('en-US', { weekday: 'short', month: 'numeric', day: 'numeric' })}</th>)}
+                            <th className="px-4 py-3 w-32 text-center">Weekly Total</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {projects.map(project => {
+                            const weeklyTotal = weekDays.reduce((acc, day) => acc + (weekLog[project.id]?.[formatDate(day)] || 0), 0);
+                            return (
+                                <tr key={project.id} className="bg-white border-b hover:bg-gray-50">
+                                    <td className="px-4 py-2 font-medium text-gray-900">{project.title}</td>
+                                    {weekDays.map(day => (
+                                        <td key={day.toISOString()} className="px-2 py-1">
+                                            <input 
+                                                type="number" 
+                                                step="0.1" 
+                                                min="0"
+                                                value={weekLog[project.id]?.[formatDate(day)] || ''}
+                                                onChange={e => handleHourChange(project.id, formatDate(day), e.target.value)}
+                                                className="w-full p-1 text-center rounded border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                                                placeholder="0"
+                                            />
+                                        </td>
+                                    ))}
+                                    <td className="px-4 py-2 font-semibold text-center">{weeklyTotal.toFixed(2)}</td>
+                                </tr>
+                            )
+                        })}
+                    </tbody>
+                </table>
+            </div>
+
+            <div className="flex justify-end items-center gap-4 mt-4">
+                {error && <p className="text-red-500 text-sm">Error: {error}</p>}
+                <button onClick={handleSave} disabled={isLoading} className="px-6 py-2 bg-indigo-600 text-white font-semibold rounded-lg shadow-md hover:bg-indigo-700 disabled:bg-indigo-300">
+                    {isLoading ? 'Saving...' : 'Save Changes'}
+                </button>
+            </div>
+        </div>
+    );
+};
+
+export const TeamProductivityView: React.FC = () => {
+    const [currentDate, setCurrentDate] = useState(new Date());
+    const [teamLogs, setTeamLogs] = useState<Record<string, number>>({});
+    const [isLoading, setIsLoading] = useState(false);
+
+    const startOfWeek = useMemo(() => getStartOfWeek(currentDate), [currentDate]);
+    const endOfWeek = useMemo(() => {
+        const end = new Date(startOfWeek);
+        end.setDate(startOfWeek.getDate() + 4);
+        return end;
+    }, [startOfWeek]);
+
+    useEffect(() => {
+        const fetchLogs = async () => {
+            setIsLoading(true);
+            const { data, error } = await supabase
+                .from('productivity_logs')
+                .select('editor_name, hours_worked')
+                .gte('date', formatDate(startOfWeek))
+                .lte('date', formatDate(endOfWeek));
+            
+            if (data) {
+                const summary = data.reduce((acc, log) => {
+                    acc[log.editor_name] = (acc[log.editor_name] || 0) + log.hours_worked;
+                    return acc;
+                }, {} as Record<string, number>);
+                setTeamLogs(summary);
+            }
+            setIsLoading(false);
+        };
+        fetchLogs();
+    }, [startOfWeek]);
+
+    const sortedEditors = useMemo(() => editors.sort((a,b) => (teamLogs[b] || 0) - (teamLogs[a] || 0)), [teamLogs]);
+
+    return (
+        <div className="space-y-4">
+            <div className="flex justify-between items-center bg-gray-50 p-3 rounded-lg">
+                <button onClick={() => setCurrentDate(d => new Date(d.setDate(d.getDate() - 7)))} className="px-3 py-1 bg-white border rounded-md">&larr; Prev Week</button>
+                <h3 className="text-lg font-semibold">Week of {startOfWeek.toLocaleDateString()}</h3>
+                <button onClick={() => setCurrentDate(d => new Date(d.setDate(d.getDate() + 7)))} className="px-3 py-1 bg-white border rounded-md">Next Week &rarr;</button>
+            </div>
+             <div className="bg-white rounded-lg shadow-md overflow-x-auto">
+                <table className="w-full text-sm text-left text-gray-500">
+                    <thead className="text-xs text-gray-700 uppercase bg-gray-50">
+                        <tr>
+                            <th className="px-6 py-3">Editor</th>
+                            <th className="px-6 py-3">Total Hours Logged</th>
+                        </tr>
+                    </thead>
+                    <tbody>
+                        {sortedEditors.map(editor => (
+                            <tr key={editor} className="bg-white border-b hover:bg-gray-50">
+                                <td className="px-6 py-4 font-semibold text-gray-900">{editor}</td>
+                                <td className="px-6 py-4">{(teamLogs[editor] || 0).toFixed(2)}</td>
+                            </tr>
+                        ))}
+                    </tbody>
+                </table>
+            </div>
+        </div>
+    )
 };

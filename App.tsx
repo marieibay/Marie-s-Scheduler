@@ -9,27 +9,39 @@ import {
     DeleteConfirmationModal,
     PlusIcon,
     DailyNotesWidget,
-    MemoIcon
+    MemoIcon,
+    ProductivityLogger,
+    TeamProductivityView,
 } from './components';
 import { getClientName } from './utils';
 import { ProjectCard } from './components';
+import { editors } from './employees';
+
 
 // --- CHILD COMPONENTS (Now receive state and handlers via props) ---
 
-const EditorPage: React.FC<{
+const EditorDashboard: React.FC<{
     projects: Project[]; 
-    onUpdate: (id: number, field: keyof Project, value: string | number | boolean) => void;
-}> = ({ projects, onUpdate }) => {
+    onUpdateProjectField: (id: number, field: keyof Project, value: string | number | boolean) => void;
+}> = ({ projects, onUpdateProjectField }) => {
+    const [activeTab, setActiveTab] = useState('logHours');
+    const [selectedEditor, setSelectedEditor] = useState<string>(() => {
+        return localStorage.getItem('selectedEditor') || (editors.length > 0 ? editors[0] : '');
+    });
 
-    const editorProjects = useMemo(() => {
+    useEffect(() => {
+        localStorage.setItem('selectedEditor', selectedEditor);
+    }, [selectedEditor]);
+
+    const assignedProjects = useMemo(() => {
         return [...projects]
-          .filter(p => p.status === 'ongoing')
+          .filter(p => p.status === 'ongoing' && p.editor === selectedEditor)
           .sort((a, b) => {
             if (!a.due_date) return 1;
             if (!b.due_date) return -1;
             return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
           });
-    }, [projects]);
+    }, [projects, selectedEditor]);
     
     return (
       <div className="container mx-auto p-4 md:p-8">
@@ -38,9 +50,37 @@ const EditorPage: React.FC<{
                 <h1 className="text-3xl font-bold text-gray-900">Audiobook Production Dashboard</h1>
                 <p className="text-gray-600">Editor Workflow</p>
             </div>
+            <div className="flex items-center gap-4">
+                <label htmlFor="editor-select" className="text-sm font-medium text-gray-700">Viewing as:</label>
+                <select 
+                    id="editor-select"
+                    value={selectedEditor} 
+                    onChange={e => setSelectedEditor(e.target.value)}
+                    className="mt-1 block w-full pl-3 pr-10 py-2 text-base border-gray-300 focus:outline-none focus:ring-indigo-500 focus:border-indigo-500 sm:text-sm rounded-md"
+                >
+                    {editors.map(editor => <option key={editor} value={editor}>{editor}</option>)}
+                </select>
+            </div>
         </header>
+        
+        <div className="border-b border-gray-200 mb-6">
+            <nav className="-mb-px flex space-x-6" aria-label="Tabs">
+                <button onClick={() => setActiveTab('logHours')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'logHours' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
+                    Log Weekly Hours
+                </button>
+                <button onClick={() => setActiveTab('myProjects')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'myProjects' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
+                    My Open Projects
+                </button>
+                <button onClick={() => setActiveTab('teamProductivity')} className={`whitespace-nowrap py-4 px-1 border-b-2 font-medium text-sm ${activeTab === 'teamProductivity' ? 'border-indigo-500 text-indigo-600' : 'border-transparent text-gray-500 hover:text-gray-700 hover:border-gray-300'}`}>
+                    Team Productivity
+                </button>
+            </nav>
+        </div>
+
         <main>
-          <EditorView projects={editorProjects} onUpdate={onUpdate} />
+            {activeTab === 'myProjects' && <EditorView projects={assignedProjects} onUpdate={onUpdateProjectField} />}
+            {activeTab === 'logHours' && <ProductivityLogger projects={assignedProjects} editorName={selectedEditor} />}
+            {activeTab === 'teamProductivity' && <TeamProductivityView />}
         </main>
       </div>
     );
@@ -559,7 +599,7 @@ const App: React.FC = () => {
     }
 
     if (route === '/editor' || route === '/editor.html') {
-        return <EditorPage projects={projects} onUpdate={handleUpdateProjectField} />;
+        return <EditorDashboard projects={projects} onUpdateProjectField={handleUpdateProjectField} />;
     }
     return <ManagerDashboard projects={projects} dailyNotesContent={dailyNotesContent} onAddProject={handleAddNewProject} onUpdateProject={handleUpdateProjectField} onNotesChange={handleNotesChange} isNewEditColumnMissing={isNewEditColumnMissing} isLoading={isLoading} />;
 };
