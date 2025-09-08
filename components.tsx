@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { Project, ProductivityLog } from './types';
 import { editors, masters, qcPersonnel } from './employees';
@@ -68,6 +67,31 @@ const CalendarIcon: React.FC<{ className?: string }> = ({ className }) => (
 
 
 // --- CHILD COMPONENTS ---
+
+// Hours Breakdown Tooltip
+const HoursBreakdownTooltip: React.FC<{ breakdown?: Record<string, number> }> = ({ breakdown }) => {
+    if (!breakdown) return null;
+    const sortedEditors = Object.keys(breakdown).sort((a, b) => breakdown[b] - breakdown[a]);
+
+    if (sortedEditors.length === 0) {
+        return null;
+    }
+
+    return (
+        <div className="absolute z-20 w-48 p-2 text-sm font-normal text-left text-gray-700 bg-white border border-gray-200 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none -translate-x-1/2 left-1/2 -top-2 translate-y-[-100%]">
+            <h4 className="font-semibold mb-1 border-b pb-1">Hours Breakdown</h4>
+            <ul className="space-y-1 mt-2">
+                {sortedEditors.map(editor => (
+                    <li key={editor} className="flex justify-between">
+                        <span>{editor}:</span>
+                        <strong>{breakdown[editor].toFixed(2)}h</strong>
+                    </li>
+                ))}
+            </ul>
+            <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-gray-200"></div>
+        </div>
+    );
+};
 
 // Daily Notes Widget
 interface DailyNotesWidgetProps {
@@ -448,8 +472,9 @@ interface ProjectCardProps {
     onDelete?: (project: Project) => void;
     isClientView?: boolean;
     isNewEditColumnMissing?: boolean;
+    productivityBreakdown?: Record<string, number>;
 }
-export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onDelete, isClientView = false, isNewEditColumnMissing = false }) => {
+export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onDelete, isClientView = false, isNewEditColumnMissing = false, productivityBreakdown }) => {
     const handleUpdate = (field: keyof Project, value: any) => onUpdate(project.id, field, value);
     const renderStatusButtons = () => {
         switch (project.status) {
@@ -517,9 +542,10 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onD
                             {renderNumberField(project.est_rt, 'est_rt')}
                             <p className="text-xs text-blue-600 mt-1">EST RT</p>
                         </div>
-                        <div className="bg-yellow-50 p-2 rounded-lg w-24 text-center">
+                        <div className="bg-yellow-50 p-2 rounded-lg w-24 text-center relative group">
                             <p className="font-bold text-lg text-yellow-800 text-center h-9 flex items-center justify-center">{project.total_edited || 0}</p>
                             <p className="text-xs text-yellow-600 mt-1">Edited</p>
+                            <HoursBreakdownTooltip breakdown={productivityBreakdown} />
                         </div>
                         <div className="bg-green-50 p-2 rounded-lg w-24 text-center">
                             <p className="font-bold text-lg text-green-800 h-9 flex items-center justify-center">{calculateWhatsLeft(project.est_rt, project.total_edited)}</p>
@@ -543,31 +569,32 @@ interface ViewProps {
     onUpdate: (id: number, field: keyof Project, value: any) => void;
     onDelete?: (project: Project) => void;
     isNewEditColumnMissing?: boolean;
+    productivityByProject?: Record<number, Record<string, number>>;
 }
 
-export const ManagerView: React.FC<ViewProps> = ({ projects, onUpdate, onDelete, isNewEditColumnMissing }) => {
+export const ManagerView: React.FC<ViewProps> = ({ projects, onUpdate, onDelete, isNewEditColumnMissing, productivityByProject }) => {
     if (projects.length === 0) return <div className="text-center text-gray-500 py-10">No projects to display in this category.</div>;
     return (
         <div className="space-y-4">
             {projects.map(project => (
-                <ProjectCard key={project.id} project={project} onUpdate={onUpdate} onDelete={onDelete} isClientView={false} isNewEditColumnMissing={isNewEditColumnMissing} />
+                <ProjectCard key={project.id} project={project} onUpdate={onUpdate} onDelete={onDelete} isClientView={false} isNewEditColumnMissing={isNewEditColumnMissing} productivityBreakdown={productivityByProject?.[project.id]} />
             ))}
         </div>
     );
 };
 
-export const ClientView: React.FC<Omit<ViewProps, 'onDelete'>> = ({ projects, onUpdate }) => {
+export const ClientView: React.FC<Omit<ViewProps, 'onDelete'>> = ({ projects, onUpdate, productivityByProject }) => {
     if (projects.length === 0) return <div className="text-center text-gray-500 py-10">No projects to display in this category.</div>;
     return (
         <div className="space-y-4">
             {projects.map(project => (
-                 <ProjectCard key={project.id} project={project} onUpdate={onUpdate} isClientView={true} />
+                 <ProjectCard key={project.id} project={project} onUpdate={onUpdate} isClientView={true} productivityBreakdown={productivityByProject?.[project.id]} />
             ))}
         </div>
     );
 };
 
-export const EditorView: React.FC<Omit<ViewProps, 'onDelete'>> = ({ projects, onUpdate }) => {
+export const EditorView: React.FC<Omit<ViewProps, 'onDelete'>> = ({ projects, onUpdate, productivityByProject }) => {
     const handleUpdate = (id: number, field: keyof Project, value: any) => onUpdate(id, field, value);
 
     if (projects.length === 0) return <div className="text-center text-gray-500 py-10">No ongoing projects assigned.</div>;
@@ -597,7 +624,10 @@ export const EditorView: React.FC<Omit<ViewProps, 'onDelete'>> = ({ projects, on
                             </td>
                             <td className="px-6 py-4 font-semibold">{project.editor}</td>
                             <td className="px-6 py-4">{project.est_rt}</td>
-                            <td className="px-6 py-4">{project.total_edited}</td>
+                            <td className="px-6 py-4 relative group">
+                                {project.total_edited}
+                                <HoursBreakdownTooltip breakdown={productivityByProject?.[project.id]} />
+                            </td>
                             <td className="px-6 py-4 font-semibold">{calculateWhatsLeft(project.est_rt, project.total_edited)}</td>
                             <td className="px-6 py-4 w-32">
                                <input type="number" step="0.01" value={project.remaining_raw ?? ''} onChange={(e) => handleUpdate(project.id, 'remaining_raw', parseFloat(e.target.value) || 0)} className="w-full p-1 rounded border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"/>

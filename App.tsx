@@ -1,6 +1,5 @@
-
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { Project, ViewMode } from './types';
+import { Project, ViewMode, ProductivityLog } from './types';
 import { supabase } from './supabaseClient';
 import { 
     ManagerView, 
@@ -95,12 +94,13 @@ const EditorDashboard: React.FC<{
 const ManagerDashboard: React.FC<{
     projects: Project[];
     dailyNotesContent: string;
+    productivityByProject: Record<number, Record<string, number>>;
     onAddProject: () => void;
     onUpdateProject: (id: number, field: keyof Project, value: string | number | boolean | null) => void;
     onNotesChange: (newContent: string) => void;
     isNewEditColumnMissing: boolean;
     isLoading: boolean;
-}> = ({ projects, dailyNotesContent, onAddProject, onUpdateProject, onNotesChange, isNewEditColumnMissing, isLoading }) => {
+}> = ({ projects, dailyNotesContent, productivityByProject, onAddProject, onUpdateProject, onNotesChange, isNewEditColumnMissing, isLoading }) => {
     const [viewMode, setViewMode] = useState<ViewMode>('manager');
     const [currentPage, setCurrentPage] = useState<'ongoing' | 'done' | 'all-active' | 'archived' | 'editorView'>('ongoing');
     const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
@@ -180,7 +180,7 @@ const ManagerDashboard: React.FC<{
                 if (!b.due_date) return -1;
                 return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
             });
-            return <EditorView projects={sortedProjects} onUpdate={onUpdateProject} />;
+            return <EditorView projects={sortedProjects} onUpdate={onUpdateProject} productivityByProject={productivityByProject} />;
         }
 
         // Client View is always grouped and shows ongoing projects
@@ -203,6 +203,7 @@ const ManagerDashboard: React.FC<{
                                         project={project}
                                         onUpdate={onUpdateProject}
                                         isClientView={true}
+                                        productivityBreakdown={productivityByProject?.[project.id]}
                                     />
                                 ))}
                             </div>
@@ -226,7 +227,7 @@ const ManagerDashboard: React.FC<{
                     if (!b.due_date) return -1;
                     return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
                 });
-                return <ManagerView projects={dateSortedProjects} onUpdate={onUpdateProject} onDelete={handleOpenDeleteModal} isNewEditColumnMissing={isNewEditColumnMissing} />;
+                return <ManagerView projects={dateSortedProjects} onUpdate={onUpdateProject} onDelete={handleOpenDeleteModal} isNewEditColumnMissing={isNewEditColumnMissing} productivityByProject={productivityByProject} />;
             }
             
             // Default: sort by client
@@ -246,6 +247,7 @@ const ManagerDashboard: React.FC<{
                                         onDelete={handleOpenDeleteModal}
                                         isClientView={false}
                                         isNewEditColumnMissing={isNewEditColumnMissing}
+                                        productivityBreakdown={productivityByProject?.[project.id]}
                                     />
                                 ))}
                             </div>
@@ -281,7 +283,7 @@ const ManagerDashboard: React.FC<{
             projectsForView = archivedProjects;
         }
 
-        return <ManagerView projects={projectsForView} onUpdate={onUpdateProject} onDelete={handleOpenDeleteModal} isNewEditColumnMissing={isNewEditColumnMissing} />;
+        return <ManagerView projects={projectsForView} onUpdate={onUpdateProject} onDelete={handleOpenDeleteModal} isNewEditColumnMissing={isNewEditColumnMissing} productivityByProject={productivityByProject} />;
     };
 
     return (
@@ -398,6 +400,7 @@ const ManagerDashboard: React.FC<{
 const App: React.FC = () => {
     const [projects, setProjects] = useState<Project[]>([]);
     const [dailyNotesContent, setDailyNotesContent] = useState('');
+    const [productivityLogs, setProductivityLogs] = useState<ProductivityLog[]>([]);
     const [route, setRoute] = useState(window.location.pathname);
     const [isNewEditColumnMissing, setIsNewEditColumnMissing] = useState(false);
     const newEditFailureDetected = useRef(false);
@@ -434,10 +437,17 @@ const App: React.FC = () => {
             else setDailyNotesContent(data?.content || '');
         };
         
+        // Fetch productivity logs
+        const fetchLogs = async () => {
+            const { data, error } = await supabase.from('productivity_logs').select('*');
+            if (error) console.error('Error fetching logs:', error.message);
+            else setProductivityLogs(data || []);
+        };
+
         // Run all startup tasks, ensuring the feature probe happens first.
         const startup = async () => {
             await probeForNewEditColumn();
-            await Promise.all([fetchProjects(), fetchNotes()]);
+            await Promise.all([fetchProjects(), fetchNotes(), fetchLogs()]);
             setIsLoading(false);
         };
         
@@ -467,11 +477,33 @@ const App: React.FC = () => {
             setDailyNotesContent((payload.new as { content: string }).content);
           }).subscribe();
 
+        // Subscribe to productivity log changes
+        const logsChannel = supabase.channel('productivity_logs')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'productivity_logs' }, async (payload) => {
+                fetchLogs(); // Re-fetch all logs for simplicity and consistency
+            }).subscribe();
+
+
         return () => {
             supabase.removeChannel(projectsChannel);
             supabase.removeChannel(notesChannel);
+            supabase.removeChannel(logsChannel);
         };
     }, []);
+
+    const productivityByProject = useMemo(() => {
+        return productivityLogs.reduce((acc, log) => {
+            const { project_id, editor_name, hours_worked } = log;
+            if (!acc[project_id]) {
+                acc[project_id] = {};
+            }
+            if (!acc[project_id][editor_name]) {
+                acc[project_id][editor_name] = 0;
+            }
+            acc[project_id][editor_name] += hours_worked;
+            return acc;
+        }, {} as Record<number, Record<string, number>>);
+    }, [productivityLogs]);
 
     // --- CENTRALIZED HANDLER FUNCTIONS ---
     
@@ -607,7 +639,7 @@ const App: React.FC = () => {
     if (route === '/editor' || route === '/editor.html') {
         return <EditorDashboard projects={projects} onUpdateProjectField={handleUpdateProjectField} />;
     }
-    return <ManagerDashboard projects={projects} dailyNotesContent={dailyNotesContent} onAddProject={handleAddNewProject} onUpdateProject={handleUpdateProjectField} onNotesChange={handleNotesChange} isNewEditColumnMissing={isNewEditColumnMissing} isLoading={isLoading} />;
+    return <ManagerDashboard projects={projects} dailyNotesContent={dailyNotesContent} onAddProject={handleAddNewProject} onUpdateProject={handleUpdateProjectField} onNotesChange={handleNotesChange} isNewEditColumnMissing={isNewEditColumnMissing} isLoading={isLoading} productivityByProject={productivityByProject} />;
 };
 
 export default App;
