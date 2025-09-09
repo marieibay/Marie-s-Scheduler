@@ -1290,6 +1290,10 @@ export const TeamProductivityView: React.FC = () => {
     };
 
     const sortedEditors = useMemo(() => editors.sort((a,b) => (teamLogs[b] || 0) - (teamLogs[a] || 0)), [teamLogs]);
+    
+    const totalHours = useMemo(() => {
+        return Object.values(teamLogs).reduce((sum, hours) => sum + hours, 0);
+    }, [teamLogs]);
 
     return (
         <div className="space-y-4">
@@ -1320,6 +1324,14 @@ export const TeamProductivityView: React.FC = () => {
                             </tr>
                         ))}
                     </tbody>
+                    <tfoot className="bg-gray-50 border-t-2 border-gray-200">
+                        <tr className="font-semibold text-gray-800">
+                            <td className="px-6 py-4 text-base">Total</td>
+                            <td className="px-6 py-4 font-bold text-lg text-indigo-600">
+                                {totalHours.toFixed(2)}
+                            </td>
+                        </tr>
+                    </tfoot>
                 </table>
             </div>
         </div>
