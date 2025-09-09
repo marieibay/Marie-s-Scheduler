@@ -18,9 +18,9 @@ export const QCDashboard: React.FC<QCDashboardProps> = ({ projects, qcLogs }) =>
         localStorage.setItem('selectedQC', selectedQC);
     }, [selectedQC]);
 
-    const allOngoingProjects = useMemo(() => {
+    const activeProjectsForQC = useMemo(() => {
         return [...projects]
-            .filter(p => p.status === 'ongoing')
+            .filter(p => p.status === 'ongoing' || p.status === 'done')
             .sort((a, b) => a.title.localeCompare(b.title));
     }, [projects]);
 
@@ -61,7 +61,7 @@ export const QCDashboard: React.FC<QCDashboardProps> = ({ projects, qcLogs }) =>
             </div>
 
             <main className="container mx-auto p-4 md:px-8 md:py-8">
-                {activeTab === 'logHours' && <QCProjectLoggerDashboard projects={allOngoingProjects} allLogs={qcLogs} selectedQC={selectedQC} />}
+                {activeTab === 'logHours' && <QCProjectLoggerDashboard projects={activeProjectsForQC} allLogs={qcLogs} selectedQC={selectedQC} />}
                 {activeTab === 'myStats' && <QCPersonalStatsView allLogs={qcLogs} selectedQC={selectedQC} projects={projects} />}
                 {activeTab === 'teamProductivity' && <QCTeamProductivityView />}
             </main>
