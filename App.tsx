@@ -1,5 +1,5 @@
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
-import { Project, ViewMode, ProductivityLog } from './types';
+import { Project, ViewMode, ProductivityLog, QCProductivityLog } from './types';
 import { supabase } from './supabaseClient';
 import { 
     ManagerView, 
@@ -13,6 +13,7 @@ import {
     TeamProductivityView,
     PersonalStatsView,
 } from './components';
+import { QCDashboard } from './QCDashboard';
 import { getClientName } from './utils';
 import { ProjectCard } from './components';
 import { editors } from './employees';
@@ -398,17 +399,33 @@ const App: React.FC = () => {
     const [projects, setProjects] = useState<Project[]>([]);
     const [dailyNotesContent, setDailyNotesContent] = useState('');
     const [productivityLogs, setProductivityLogs] = useState<ProductivityLog[]>([]);
+    const [qcProductivityLogs, setQcProductivityLogs] = useState<QCProductivityLog[]>([]);
     const [route, setRoute] = useState(window.location.pathname);
     const [isNewEditColumnMissing, setIsNewEditColumnMissing] = useState(false);
+    const [isQcFeatureAvailable, setIsQcFeatureAvailable] = useState<boolean | null>(null);
     const newEditFailureDetected = useRef(false);
     const [isLoading, setIsLoading] = useState(true);
 
-    // --- CENTRALIZED DATA FETCHING & REAL-TIME SUBSCRIPTION ---
+    // --- DATA FETCHING & REAL-TIME SUBSCRIPTIONS ---
     useEffect(() => {
+        // Probe for QC table to determine if the feature is available
+        const probeForQcTable = async () => {
+             // Using `head: true` is efficient; it just checks for existence without returning data.
+            const { error } = await supabase.from('qc_productivity_logs').select('id', { count: 'exact', head: true });
+            if (error && (error.message.includes("Could not find the table") || error.message.includes("does not exist"))) {
+                console.warn("QC feature is unavailable because 'qc_productivity_logs' table is missing.");
+                setIsQcFeatureAvailable(false);
+            } else if (error) {
+                console.error("An unexpected error occurred while checking for QC table:", error.message);
+                setIsQcFeatureAvailable(false); // Fail safe on other errors
+            } else {
+                setIsQcFeatureAvailable(true);
+            }
+        };
+
         // Proactively check for the existence of the 'is_new_edit' column on startup.
         const probeForNewEditColumn = async () => {
             if (newEditFailureDetected.current) return;
-            // This query will fail if the column doesn't exist, allowing us to disable the feature early.
             const { error } = await supabase.from('projects').select('is_new_edit').limit(1);
             if (error && error.message.includes("Could not find the 'is_new_edit' column")) {
                 console.warn("Feature 'New Edit' is unavailable. Proactively disabling.");
@@ -417,7 +434,6 @@ const App: React.FC = () => {
             }
         };
 
-        // Fetch projects
         const fetchProjects = async () => {
             const { data, error } = await supabase.from('projects').select('*');
             if (error) console.error('Error fetching initial projects:', error.message);
@@ -427,30 +443,31 @@ const App: React.FC = () => {
             }
         };
 
-        // Fetch daily notes
         const fetchNotes = async () => {
             const { data, error } = await supabase.from('daily_notes').select('content').eq('id', 1).single();
             if (error) console.error('Error fetching notes:', error.message);
             else setDailyNotesContent(data?.content || '');
         };
         
-        // Fetch productivity logs
         const fetchLogs = async () => {
             const { data, error } = await supabase.from('productivity_logs').select('*');
             if (error) console.error('Error fetching logs:', error.message);
             else setProductivityLogs(data || []);
         };
-
-        // Run all startup tasks, ensuring the feature probe happens first.
+        
         const startup = async () => {
-            await probeForNewEditColumn();
-            await Promise.all([fetchProjects(), fetchNotes(), fetchLogs()]);
+            await Promise.all([
+                probeForQcTable(),
+                probeForNewEditColumn(),
+                fetchProjects(),
+                fetchNotes(),
+                fetchLogs()
+            ]);
             setIsLoading(false);
         };
-        
         startup();
 
-        // Subscribe to project changes
+        // Subscribe to non-QC tables
         const projectsChannel = supabase.channel('projects')
           .on('postgres_changes', { event: '*', schema: 'public', table: 'projects' }, payload => {
               if (payload.eventType === 'INSERT') {
@@ -468,39 +485,69 @@ const App: React.FC = () => {
               }
           }).subscribe();
 
-        // Subscribe to daily notes changes
         const notesChannel = supabase.channel('daily_notes')
           .on('postgres_changes', { event: 'UPDATE', schema: 'public', table: 'daily_notes', filter: 'id=eq.1' }, payload => {
             setDailyNotesContent((payload.new as { content: string }).content);
           }).subscribe();
 
-        // Subscribe to productivity log changes
         const logsChannel = supabase.channel('productivity_logs')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'productivity_logs' }, async (payload) => {
-                // Instead of a full refetch, intelligently update the local state
                 if (payload.eventType === 'INSERT') {
                     setProductivityLogs(current => [...current, payload.new as ProductivityLog]);
                 } else if (payload.eventType === 'UPDATE') {
                     setProductivityLogs(current => current.map(l => l.id === payload.new.id ? payload.new as ProductivityLog : l));
                 } else if (payload.eventType === 'DELETE') {
                     const deletedLog = payload.old as Partial<ProductivityLog>;
-                    // If we don't have the ID from the old payload, we might need a more robust delete.
-                    // For now, assume ID is present or handle deletes by refetching.
                     if (deletedLog.id) {
                        setProductivityLogs(current => current.filter(l => l.id !== deletedLog.id));
                     } else {
-                       fetchLogs(); // Fallback to refetch if ID is missing
+                       fetchLogs();
                     }
                 }
             }).subscribe();
-
-
+        
         return () => {
             supabase.removeChannel(projectsChannel);
             supabase.removeChannel(notesChannel);
             supabase.removeChannel(logsChannel);
         };
     }, []);
+
+    // Effect for fetching and subscribing to QC data, ONLY if the feature is available.
+    useEffect(() => {
+        if (isQcFeatureAvailable !== true) {
+            setQcProductivityLogs([]); // Ensure data is cleared if feature is disabled
+            return;
+        }
+
+        const fetchQcLogs = async () => {
+            const { data, error } = await supabase.from('qc_productivity_logs').select('*');
+            if (error) console.error('Error fetching QC logs:', error.message);
+            else setQcProductivityLogs(data || []);
+        };
+        fetchQcLogs();
+
+        const qcLogsChannel = supabase.channel('qc_productivity_logs')
+            .on('postgres_changes', { event: '*', schema: 'public', table: 'qc_productivity_logs' }, (payload) => {
+                if (payload.eventType === 'INSERT') {
+                    setQcProductivityLogs(current => [...current, payload.new as QCProductivityLog]);
+                } else if (payload.eventType === 'UPDATE') {
+                    setQcProductivityLogs(current => current.map(l => l.id === payload.new.id ? payload.new as QCProductivityLog : l));
+                } else if (payload.eventType === 'DELETE') {
+                    const deletedLog = payload.old as Partial<QCProductivityLog>;
+                    if (deletedLog.id) {
+                       setQcProductivityLogs(current => current.filter(l => l.id !== deletedLog.id));
+                    } else {
+                       fetchQcLogs();
+                    }
+                }
+            }).subscribe();
+
+        return () => {
+            supabase.removeChannel(qcLogsChannel);
+        };
+    }, [isQcFeatureAvailable]);
+
 
     const productivityByProject = useMemo(() => {
         return productivityLogs.reduce((acc, log) => {
@@ -542,12 +589,9 @@ const App: React.FC = () => {
         };
         setProjects(currentProjects => [tempProject, ...currentProjects]);
 
-        // Destructure to prepare for insert
         const { id, created_at, ...newProjectDataWithoutMeta } = tempProject;
         const newProjectData = { ...newProjectDataWithoutMeta };
 
-        // If the feature column is missing, remove the property from the object we send to the database.
-        // This makes the insert operation succeed regardless of the database schema.
         if (isNewEditColumnMissing) {
             delete (newProjectData as Partial<Project>).is_new_edit;
         }
@@ -560,7 +604,6 @@ const App: React.FC = () => {
             const errorMessage = (error && typeof error.message === 'string') ? error.message : JSON.stringify(error);
             alert(`Failed to add project: ${errorMessage}`);
             
-            // As a fallback, if we somehow still get this error, update the state.
             if (errorMessage.includes("Could not find the 'is_new_edit' column") && !isNewEditColumnMissing) {
                  setIsNewEditColumnMissing(true);
                  newEditFailureDetected.current = true;
@@ -577,7 +620,6 @@ const App: React.FC = () => {
             return; 
         }
 
-        // Prevent direct updates to total_edited as it's now a calculated field.
         if (field === 'total_edited') {
             console.warn("Direct updates to 'total_edited' are deprecated. It is now calculated from productivity logs.");
             return;
@@ -636,7 +678,6 @@ const App: React.FC = () => {
         const correctionLog: ProductivityLog = {
             project_id: projectId,
             editor_name: 'Historical Correction',
-            // Use a date far in the past to avoid conflicting with real logs.
             date: '2000-01-01',
             hours_worked: hours,
         };
@@ -676,6 +717,23 @@ const App: React.FC = () => {
 
     if (route === '/editor' || route === '/editor.html') {
         return <EditorDashboard projects={projects} productivityLogs={productivityLogs} onUpdateProjectField={handleUpdateProjectField} />;
+    }
+    if (route === '/qc' || route === '/qc.html') {
+        if (isLoading || isQcFeatureAvailable === null) {
+            return <div className="flex items-center justify-center h-screen"><p>Loading...</p></div>;
+        }
+        if (isQcFeatureAvailable === false) {
+             return (
+                <div className="flex items-center justify-center min-h-screen bg-gray-100">
+                    <div className="p-8 bg-white rounded-lg shadow-md text-center max-w-lg">
+                        <h1 className="text-2xl font-bold text-red-600 mb-4">QC Feature Unavailable</h1>
+                        <p className="text-gray-700">The QC dashboard cannot be loaded because the required database table (<code className="bg-gray-200 p-1 rounded text-sm">qc_productivity_logs</code>) is missing.</p>
+                        <p className="text-gray-600 mt-4">To enable this feature, please run the SQL script provided during setup to create the table.</p>
+                    </div>
+                </div>
+            );
+        }
+        return <QCDashboard projects={projects} qcLogs={qcProductivityLogs} />;
     }
     return <ManagerDashboard projects={projects} dailyNotesContent={dailyNotesContent} onAddProject={handleAddNewProject} onUpdateProject={handleUpdateProjectField} onNotesChange={handleNotesChange} onHistoricalCorrection={handleHistoricalCorrection} isNewEditColumnMissing={isNewEditColumnMissing} isLoading={isLoading} productivityByProject={productivityByProject} />;
 };

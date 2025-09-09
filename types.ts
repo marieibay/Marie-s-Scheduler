@@ -29,3 +29,11 @@ export interface ProductivityLog {
   date: string; // YYYY-MM-DD
   hours_worked: number;
 }
+
+export interface QCProductivityLog {
+  id?: number;
+  qc_name: string;
+  project_id: number;
+  date: string; // YYYY-MM-DD
+  hours_worked: number;
+}
