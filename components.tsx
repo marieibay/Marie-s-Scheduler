@@ -586,7 +586,12 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onD
     const renderStatusButtons = () => {
         switch (project.status) {
             case 'ongoing': return <button onClick={() => handleUpdate('status', 'done')} className="px-3 py-1 text-xs font-semibold rounded-md shadow-sm transition-colors whitespace-nowrap bg-green-500 text-white hover:bg-green-600">Mark as Done</button>;
-            case 'done': return <button onClick={() => handleUpdate('status', 'archived')} className="px-3 py-1 text-xs font-semibold rounded-md shadow-sm transition-colors whitespace-nowrap bg-gray-500 text-white hover:bg-gray-600">Archive</button>;
+            case 'done': return (
+                <>
+                    <button onClick={() => handleUpdate('status', 'ongoing')} className="px-3 py-1 text-xs font-semibold rounded-md shadow-sm transition-colors whitespace-nowrap bg-blue-500 text-white hover:bg-blue-600">Re-open</button>
+                    <button onClick={() => handleUpdate('status', 'archived')} className="px-3 py-1 text-xs font-semibold rounded-md shadow-sm transition-colors whitespace-nowrap bg-gray-500 text-white hover:bg-gray-600">Archive</button>
+                </>
+            );
             case 'archived': return <button onClick={() => handleUpdate('status', 'done')} className="px-3 py-1 text-xs font-semibold rounded-md shadow-sm transition-colors whitespace-nowrap bg-purple-500 text-white hover:bg-purple-600">Unarchive</button>;
             default: return null;
         }
