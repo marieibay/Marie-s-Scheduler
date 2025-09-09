@@ -1308,32 +1308,34 @@ export const TeamProductivityView: React.FC = () => {
                     <button onClick={() => handleDateChange('next')} className="px-3 py-1 bg-white border rounded-md shadow-sm hover:bg-gray-100">Next &rarr;</button>
                 </div>
             </div>
-             <div className="bg-white rounded-lg shadow-md overflow-x-auto">
-                <table className="w-full text-sm text-left text-gray-500">
-                    <thead className="text-xs text-gray-700 uppercase bg-gray-50">
-                        <tr>
-                            <th className="px-6 py-3">Editor</th>
-                            <th className="px-6 py-3">Total Hours Logged</th>
-                        </tr>
-                    </thead>
-                    <tbody>
-                        {sortedEditors.map(editor => (
-                            <tr key={editor} className="bg-white border-b hover:bg-gray-50">
-                                <td className="px-6 py-4 font-semibold text-gray-900">{editor}</td>
-                                <td className="px-6 py-4 font-bold text-lg">{(teamLogs[editor] || 0).toFixed(2)}</td>
+             <div className="bg-white rounded-lg shadow-md overflow-hidden flex flex-col">
+                <div className="p-4 border-b border-gray-200 flex justify-between items-center flex-shrink-0">
+                    <div>
+                        <h4 className="text-lg font-semibold text-gray-800">Total Team Hours</h4>
+                        <p className="text-sm text-gray-500">For {viewMode === 'week' ? 'this week' : 'this month'}</p>
+                    </div>
+                    <p className="text-3xl font-bold text-indigo-600">{totalHours.toFixed(2)}</p>
+                </div>
+
+                <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 380px)' }}>
+                    <table className="w-full text-sm text-left text-gray-500">
+                        <thead className="text-xs text-gray-700 uppercase bg-gray-100 sticky top-0 z-10">
+                            <tr>
+                                <th className="px-6 py-3">Editor</th>
+                                <th className="px-6 py-3">Total Hours Logged</th>
                             </tr>
-                        ))}
-                    </tbody>
-                    <tfoot className="bg-gray-50 border-t-2 border-gray-200">
-                        <tr className="font-semibold text-gray-800">
-                            <td className="px-6 py-4 text-base">Total</td>
-                            <td className="px-6 py-4 font-bold text-lg text-indigo-600">
-                                {totalHours.toFixed(2)}
-                            </td>
-                        </tr>
-                    </tfoot>
-                </table>
+                        </thead>
+                        <tbody>
+                            {sortedEditors.map(editor => (
+                                <tr key={editor} className="bg-white border-b hover:bg-gray-50">
+                                    <td className="px-6 py-4 font-semibold text-gray-900">{editor}</td>
+                                    <td className="px-6 py-4 font-bold text-lg">{(teamLogs[editor] || 0).toFixed(2)}</td>
+                                </tr>
+                            ))}
+                        </tbody>
+                    </table>
+                </div>
             </div>
         </div>
-    )
+    );
 };
