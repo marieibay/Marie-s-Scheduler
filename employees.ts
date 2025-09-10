@@ -10,5 +10,5 @@ export const masters = [
 ];
 
 export const qcPersonnel = [
-  'Jomar', 'Sarah', 'Rein', 'Lauraine'
+  'Jomar', 'Sarah', 'Rein', 'Laurain'
 ];
