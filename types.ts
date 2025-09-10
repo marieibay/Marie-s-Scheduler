@@ -38,4 +38,5 @@ export interface QCProductivityLog {
   project_id: number;
   date: string; // YYYY-MM-DD
   hours_worked: number;
+  log_note?: string | null;
 }

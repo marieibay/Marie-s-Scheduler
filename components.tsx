@@ -1312,10 +1312,17 @@ export const PersonalStatsView: React.FC<{ allLogs: ProductivityLog[]; selectedE
     const projectBreakdown = useMemo(() => {
         const breakdown = filteredLogs.reduce((acc, log) => {
             const title = projectMap[log.project_id] || `Project ID: ${log.project_id}`;
-            acc[title] = (acc[title] || 0) + log.hours_worked;
+            if (!acc[title]) {
+                acc[title] = { hours: 0, notes: [] };
+            }
+            acc[title].hours += log.hours_worked;
+            if (log.log_note && log.log_note.trim()) {
+                acc[title].notes.push(log.log_note);
+            }
             return acc;
-        }, {} as Record<string, number>);
-        return Object.entries(breakdown).sort(([, hoursA], [, hoursB]) => hoursB - hoursA);
+        }, {} as Record<string, { hours: number; notes: string[] }>);
+        
+        return Object.entries(breakdown).sort(([, dataA], [, dataB]) => dataB.hours - dataA.hours);
     }, [filteredLogs, projectMap]);
     
     const handleDateChange = (direction: 'prev' | 'next') => {
@@ -1351,10 +1358,21 @@ export const PersonalStatsView: React.FC<{ allLogs: ProductivityLog[]; selectedE
                     <h4 className="text-xl font-bold mb-4 border-b pb-2">Project Breakdown</h4>
                     {projectBreakdown.length > 0 ? (
                          <ul className="space-y-2 max-h-60 overflow-y-auto">
-                            {projectBreakdown.map(([title, hours]) => (
-                                <li key={title} className="flex justify-between items-center text-sm p-2 rounded-md hover:bg-gray-50">
-                                    <span className="font-medium text-gray-700">{title}</span>
-                                    <span className="font-bold text-gray-900">{hours.toFixed(2)} hrs</span>
+                            {projectBreakdown.map(([title, data]) => (
+                                <li key={title} className="flex flex-col text-sm p-2 rounded-md hover:bg-gray-50">
+                                    <div className="flex justify-between items-center">
+                                        <span className="font-medium text-gray-700">{title}</span>
+                                        <span className="font-bold text-gray-900">{data.hours.toFixed(2)} hrs</span>
+                                    </div>
+                                    {data.notes.length > 0 && (
+                                        <ul className="mt-1 pl-4 list-disc list-inside">
+                                            {data.notes.map((note, index) => (
+                                                <li key={index} className="text-xs text-gray-500 italic">
+                                                    {note}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
                                 </li>
                             ))}
                         </ul>

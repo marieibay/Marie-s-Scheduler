@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { Project, QCProductivityLog } from './types';
 import { qcPersonnel } from './employees';
@@ -8,6 +9,12 @@ const TrashIcon: React.FC<{className?: string}> = ({ className = "h-5 w-5" }) =>
     <svg xmlns="http://www.w3.org/2000/svg" className={className} viewBox="0 0 20 20" fill="currentColor">
         <path fillRule="evenodd" d="M9 2a1 1 0 00-.894.553L7.382 4H4a1 1 0 000 2v10a2 2 0 002 2h8a2 2 0 002-2V6a1 1 0 100-2h-3.382l-.724-1.447A1 1 0 0011 2H9zM7 8a1 1 0 012 0v6a1 1 0 11-2 0V8zm4 0a1 1 0 012 0v6a1 1 0 11-2 0V8z" clipRule="evenodd" />
     </svg>
+);
+
+const NoteIcon: React.FC<{ hasNote?: boolean, className?: string }> = ({ hasNote, className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" className={className || "h-4 w-4"} viewBox="0 0 20 20" fill="currentColor">
+    <path fillRule="evenodd" d="M18 5v8a2 2 0 01-2 2h-5l-5 4v-4H4a2 2 0 01-2-2V5a2 2 0 012-2h12a2 2 0 012 2zM7 8H5v2h2V8zm2 0h2v2H9V8zm6 0h-2v2h2V8z" clipRule={hasNote ? "evenodd" : "nonzero"} />
+  </svg>
 );
 
 // Helper for debouncing
@@ -43,12 +50,102 @@ const getWeekDays = (startOfWeek: Date): Date[] => {
   });
 };
 
+const NotePopover: React.FC<{
+    note: string | null;
+    onSave: (note: string) => void;
+    onClose: () => void;
+}> = ({ note, onSave, onClose }) => {
+    const [text, setText] = useState(note || '');
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    useEffect(() => {
+        textareaRef.current?.focus();
+    }, []);
+
+    const handleBlur = () => {
+        onSave(text);
+        onClose();
+    };
+
+    return (
+        <div className="absolute z-20 bottom-full mb-2 w-56 -translate-x-1/2 left-1/2">
+            <div className="p-2 bg-white border border-gray-300 rounded-lg shadow-lg">
+                <textarea
+                    ref={textareaRef}
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                    onBlur={handleBlur}
+                    placeholder="Add a note..."
+                    className="w-full h-24 p-1.5 text-sm border border-gray-200 rounded-md focus:ring-1 focus:ring-indigo-500 focus:outline-none resize-none"
+                />
+            </div>
+        </div>
+    );
+};
+
+const QCDailyLogInput: React.FC<{
+    hours: string;
+    note: string | null;
+    onHoursChange: (hours: string) => void;
+    onNoteChange: (note: string) => void;
+    disabled?: boolean;
+}> = ({ hours, note, onHoursChange, onNoteChange, disabled }) => {
+    const [isNoteOpen, setIsNoteOpen] = useState(false);
+    const hasNote = useMemo(() => note && note.trim().length > 0, [note]);
+    const wrapperRef = useRef<HTMLDivElement>(null);
+    
+    const handleIconClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setIsNoteOpen(true);
+    };
+    
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (isNoteOpen && wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+                setIsNoteOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [isNoteOpen]);
+
+    return (
+        <div className="relative flex items-center" ref={wrapperRef}>
+            <input
+                type="text"
+                inputMode="decimal"
+                value={hours}
+                onChange={e => onHoursChange(e.target.value)}
+                className="w-full p-1.5 text-center rounded border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                placeholder="0"
+                disabled={disabled}
+            />
+            {!disabled && (
+                <button
+                    onClick={handleIconClick}
+                    title={hasNote ? note! : "Add note"}
+                    className={`absolute right-1 p-0.5 rounded-full transition-colors ${hasNote ? 'text-indigo-600' : 'text-gray-300 hover:text-gray-600'}`}
+                >
+                    <NoteIcon hasNote={hasNote} />
+                </button>
+            )}
+            {isNoteOpen && (
+                <NotePopover
+                    note={note}
+                    onSave={onNoteChange}
+                    onClose={() => setIsNoteOpen(false)}
+                />
+            )}
+        </div>
+    );
+};
+
 const QCTimeLogEntryRow: React.FC<{
     qcName: string;
     isNew: boolean;
     weekDays: Date[];
-    projectLogs: Record<string, string>; // Values are now strings
-    onLogChange: (qcName: string, date: string, hoursString: string) => void;
+    projectLogs: Record<string, { hours: string; note: string | null }>;
+    onLogChange: (qcName: string, date: string, hours: string, note: string | null) => void;
     onDeleteRow: (qcName: string) => void;
 }> = ({ qcName, isNew, weekDays, projectLogs, onLogChange, onDeleteRow }) => {
     const [selectedQC, setSelectedQC] = useState(qcName);
@@ -58,7 +155,15 @@ const QCTimeLogEntryRow: React.FC<{
             alert("Please select a QC person first.");
             return;
         }
-        onLogChange(selectedQC, date, value);
+        onLogChange(selectedQC, date, value, projectLogs[date]?.note || null);
+    };
+
+    const handleNoteChange = (date: string, note: string) => {
+        if (!selectedQC && isNew) {
+            alert("Please select a QC person first.");
+            return;
+        }
+        onLogChange(selectedQC, date, projectLogs[date]?.hours || '0', note);
     };
 
     const handleQCChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
@@ -82,20 +187,18 @@ const QCTimeLogEntryRow: React.FC<{
                 const dateStr = formatDate(day);
                 return (
                     <td key={dateStr} className="px-1 py-1">
-                        <input
-                            type="text"
-                            inputMode="decimal"
-                            value={projectLogs[dateStr] || ''}
-                            onChange={e => handleHourChange(dateStr, e.target.value)}
-                            className="w-full p-1.5 text-center rounded border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                            placeholder="0"
+                         <QCDailyLogInput
+                            hours={projectLogs[dateStr]?.hours || ''}
+                            note={projectLogs[dateStr]?.note || null}
+                            onHoursChange={(hours) => handleHourChange(dateStr, hours)}
+                            onNoteChange={(note) => handleNoteChange(dateStr, note)}
                             disabled={isNew && !selectedQC}
                         />
                     </td>
                 );
             })}
             <td className="px-2 py-2 font-semibold text-center text-gray-700">
-                {Object.values(projectLogs).reduce((acc, h) => acc + (parseFloat(h) || 0), 0).toFixed(2)}
+                {Object.values(projectLogs).reduce((acc, log) => acc + (parseFloat(log.hours) || 0), 0).toFixed(2)}
             </td>
             <td className="px-2 py-2 text-center w-12">
                 {!isNew && (
@@ -132,12 +235,10 @@ const QCProjectTimeLogCard: React.FC<{
             if (!acc[log.qc_name]) {
                 acc[log.qc_name] = {};
             }
-            acc[log.qc_name][log.date] = log.hours_worked;
+            acc[log.qc_name][log.date] = { hours_worked: log.hours_worked, log_note: log.log_note };
             return acc;
-        }, {} as Record<string, Record<string, number>>);
+        }, {} as Record<string, Record<string, Partial<QCProductivityLog>>>);
         
-        // If the current user is the assigned QC for this project and hasn't logged time,
-        // add an empty entry for them so their row appears automatically.
         if (selectedQC && project.pz_qc === selectedQC && !byQC[selectedQC]) {
             byQC[selectedQC] = {};
         }
@@ -145,12 +246,13 @@ const QCProjectTimeLogCard: React.FC<{
         return byQC;
     }, [projectLogsForWeek, project.pz_qc, selectedQC]);
 
-    const [localLogs, setLocalLogs] = useState<Record<string, Record<string, string>>>(() => {
-        const initial: Record<string, Record<string, string>> = {};
+    const [localLogs, setLocalLogs] = useState<Record<string, Record<string, { hours: string; note: string | null }>>>(() => {
+        const initial: Record<string, Record<string, { hours: string; note: string | null }>> = {};
         for (const qc in logsByQC) {
             initial[qc] = {};
             for (const date in logsByQC[qc]) {
-                initial[qc][date] = String(logsByQC[qc][date]);
+                const log = logsByQC[qc][date];
+                initial[qc][date] = { hours: String(log.hours_worked || ''), note: log.log_note || null };
             }
         }
         return initial;
@@ -158,26 +260,28 @@ const QCProjectTimeLogCard: React.FC<{
 
     useEffect(() => {
         if (!cardRef.current?.contains(document.activeElement)) {
-            const newLogs: Record<string, Record<string, string>> = {};
+            const newLogs: Record<string, Record<string, { hours: string; note: string | null }>> = {};
             for (const qc in logsByQC) {
                 newLogs[qc] = {};
                 for (const date in logsByQC[qc]) {
-                    newLogs[qc][date] = String(logsByQC[qc][date]);
+                    const log = logsByQC[qc][date];
+                    newLogs[qc][date] = { hours: String(log.hours_worked || ''), note: log.log_note || null };
                 }
             }
             setLocalLogs(newLogs);
         }
     }, [logsByQC]);
 
-    const debouncedSaveLog = useRef(debounce(async (qcName: string, date: string, hours: number) => {
-        const upsertData: QCProductivityLog = {
+    const debouncedSaveLog = useRef(debounce(async (qcName: string, date: string, hours: number, note: string | null) => {
+        const upsertData: Omit<QCProductivityLog, 'id'> = {
             project_id: project.id,
             qc_name: qcName,
             date,
-            hours_worked: hours
+            hours_worked: hours,
+            log_note: note,
         };
         
-        if (hours > 0) {
+        if (hours > 0 || (note && note.trim())) {
             const { error } = await supabase.from('qc_productivity_logs').upsert(upsertData, { onConflict: 'qc_log_uniqueness' });
             if (error) console.error('Error saving QC log:', error.message);
         } else {
@@ -186,19 +290,20 @@ const QCProjectTimeLogCard: React.FC<{
         }
     }, 750)).current;
 
-    const handleLogChange = (qcName: string, date: string, hoursString: string) => {
+    const handleLogChange = (qcName: string, date: string, hoursString: string, note: string | null) => {
         setLocalLogs(prev => {
             const newLogs = JSON.parse(JSON.stringify(prev));
             if (!newLogs[qcName]) newLogs[qcName] = {};
-            newLogs[qcName][date] = hoursString;
+            if (!newLogs[qcName][date]) newLogs[qcName][date] = { hours: '', note: null };
+            newLogs[qcName][date] = { hours: hoursString, note };
             return newLogs;
         });
 
         const hours = parseFloat(hoursString);
-        if (!isNaN(hours)) {
-            debouncedSaveLog(qcName, date, hours);
+        if (!isNaN(hours) || (note && note.trim())) {
+            debouncedSaveLog(qcName, date, isNaN(hours) ? 0 : hours, note);
         } else if (hoursString === '' || hoursString === '.') {
-            debouncedSaveLog(qcName, date, 0);
+            debouncedSaveLog(qcName, date, 0, note);
         }
     };
     
@@ -365,10 +470,16 @@ export const QCPersonalStatsView: React.FC<{ allLogs: QCProductivityLog[]; selec
     const projectBreakdown = useMemo(() => {
         const breakdown = filteredLogs.reduce((acc, log) => {
             const title = projectMap[log.project_id] || `Project ID: ${log.project_id}`;
-            acc[title] = (acc[title] || 0) + log.hours_worked;
+            if (!acc[title]) {
+                acc[title] = { hours: 0, notes: [] };
+            }
+            acc[title].hours += log.hours_worked;
+            if (log.log_note && log.log_note.trim()) {
+                acc[title].notes.push(log.log_note);
+            }
             return acc;
-        }, {} as Record<string, number>);
-        return Object.entries(breakdown).sort(([, hoursA], [, hoursB]) => hoursB - hoursA);
+        }, {} as Record<string, { hours: number; notes: string[] }>);
+        return Object.entries(breakdown).sort(([, dataA], [, dataB]) => dataB.hours - dataA.hours);
     }, [filteredLogs, projectMap]);
     
     const handleDateChange = (direction: 'prev' | 'next') => {
@@ -404,10 +515,21 @@ export const QCPersonalStatsView: React.FC<{ allLogs: QCProductivityLog[]; selec
                     <h4 className="text-xl font-bold mb-4 border-b pb-2">Project Breakdown</h4>
                     {projectBreakdown.length > 0 ? (
                          <ul className="space-y-2 max-h-60 overflow-y-auto">
-                            {projectBreakdown.map(([title, hours]) => (
-                                <li key={title} className="flex justify-between items-center text-sm p-2 rounded-md hover:bg-gray-50">
-                                    <span className="font-medium text-gray-700">{title}</span>
-                                    <span className="font-bold text-gray-900">{hours.toFixed(2)} hrs</span>
+                            {projectBreakdown.map(([title, data]) => (
+                                <li key={title} className="flex flex-col text-sm p-2 rounded-md hover:bg-gray-50">
+                                    <div className="flex justify-between items-center">
+                                        <span className="font-medium text-gray-700">{title}</span>
+                                        <span className="font-bold text-gray-900">{data.hours.toFixed(2)} hrs</span>
+                                    </div>
+                                    {data.notes.length > 0 && (
+                                        <ul className="mt-1 pl-4 list-disc list-inside">
+                                            {data.notes.map((note, index) => (
+                                                <li key={index} className="text-xs text-gray-500 italic">
+                                                    {note}
+                                                </li>
+                                            ))}
+                                        </ul>
+                                    )}
                                 </li>
                             ))}
                         </ul>
