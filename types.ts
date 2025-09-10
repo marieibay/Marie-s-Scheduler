@@ -28,6 +28,8 @@ export interface ProductivityLog {
   project_id: number;
   date: string; // YYYY-MM-DD
   hours_worked: number;
+  punch_or_roll?: 'P' | 'R' | null;
+  log_note?: string | null;
 }
 
 export interface QCProductivityLog {

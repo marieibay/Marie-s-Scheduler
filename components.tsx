@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { Project, ProductivityLog } from './types';
 import { editors, masters, qcPersonnel } from './employees';
@@ -24,6 +25,12 @@ export const XIcon: React.FC = () => (
     <svg xmlns="http://www.w3.org/2000/svg" className="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" strokeWidth={2}>
         <path strokeLinecap="round" strokeLinejoin="round" d="M6 18L18 6M6 6l12 12" />
     </svg>
+);
+
+const NoteIcon: React.FC<{ hasNote?: boolean, className?: string }> = ({ hasNote, className }) => (
+  <svg xmlns="http://www.w3.org/2000/svg" className={className || "h-4 w-4"} viewBox="0 0 20 20" fill="currentColor">
+    <path fillRule="evenodd" d="M18 5v8a2 2 0 01-2 2h-5l-5 4v-4H4a2 2 0 01-2-2V5a2 2 0 012-2h12a2 2 0 012 2zM7 8H5v2h2V8zm2 0h2v2H9V8zm6 0h-2v2h2V8z" clipRule={hasNote ? "evenodd" : "nonzero"} />
+  </svg>
 );
 
 const WarningIconRed: React.FC = () => (
@@ -796,68 +803,172 @@ const getWeekDays = (startOfWeek: Date): Date[] => {
   });
 };
 
+const NotePopover: React.FC<{
+    note: string | null;
+    onSave: (note: string) => void;
+    onClose: () => void;
+}> = ({ note, onSave, onClose }) => {
+    const [text, setText] = useState(note || '');
+    const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+    useEffect(() => {
+        textareaRef.current?.focus();
+    }, []);
+
+    const handleBlur = () => {
+        onSave(text);
+        onClose();
+    };
+
+    return (
+        <div className="absolute z-20 bottom-full mb-2 w-56 -translate-x-1/2 left-1/2">
+            <div className="p-2 bg-white border border-gray-300 rounded-lg shadow-lg">
+                <textarea
+                    ref={textareaRef}
+                    value={text}
+                    onChange={(e) => setText(e.target.value)}
+                    onBlur={handleBlur}
+                    placeholder="Add a note..."
+                    className="w-full h-24 p-1.5 text-sm border border-gray-200 rounded-md focus:ring-1 focus:ring-indigo-500 focus:outline-none resize-none"
+                />
+            </div>
+        </div>
+    );
+};
+
+const DailyLogInput: React.FC<{
+    hours: string;
+    note: string | null;
+    onHoursChange: (hours: string) => void;
+    onNoteChange: (note: string) => void;
+    disabled?: boolean;
+}> = ({ hours, note, onHoursChange, onNoteChange, disabled }) => {
+    const [isNoteOpen, setIsNoteOpen] = useState(false);
+    const hasNote = useMemo(() => note && note.trim().length > 0, [note]);
+    const wrapperRef = useRef<HTMLDivElement>(null);
+    
+    const handleIconClick = (e: React.MouseEvent) => {
+        e.stopPropagation();
+        setIsNoteOpen(true);
+    };
+    
+    useEffect(() => {
+        const handleClickOutside = (event: MouseEvent) => {
+            if (isNoteOpen && wrapperRef.current && !wrapperRef.current.contains(event.target as Node)) {
+                setIsNoteOpen(false);
+            }
+        };
+        document.addEventListener('mousedown', handleClickOutside);
+        return () => document.removeEventListener('mousedown', handleClickOutside);
+    }, [isNoteOpen]);
+
+    return (
+        <div className="relative flex items-center" ref={wrapperRef}>
+            <input
+                type="text"
+                inputMode="decimal"
+                value={hours}
+                onChange={e => onHoursChange(e.target.value)}
+                className="w-full p-1.5 text-center rounded border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
+                placeholder="0"
+                disabled={disabled}
+            />
+            {!disabled && (
+                <button
+                    onClick={handleIconClick}
+                    title={hasNote ? note! : "Add note"}
+                    className={`absolute right-1 p-0.5 rounded-full transition-colors ${hasNote ? 'text-indigo-600' : 'text-gray-300 hover:text-gray-600'}`}
+                >
+                    <NoteIcon hasNote={hasNote} />
+                </button>
+            )}
+            {isNoteOpen && (
+                <NotePopover
+                    note={note}
+                    onSave={onNoteChange}
+                    onClose={() => setIsNoteOpen(false)}
+                />
+            )}
+        </div>
+    );
+};
+
 const TimeLogEntryRow: React.FC<{
     editorName: string;
     isNew: boolean;
     weekDays: Date[];
-    projectLogs: Record<string, string>; // Values are now strings
-    onLogChange: (editorName: string, date: string, hoursString: string) => void;
-    onEditorSelect: (oldName: string, newName: string) => void;
+    punchOrRoll: 'P' | 'R' | '';
+    projectLogs: Record<string, { hours: string; note: string | null }>;
+    onLogChange: (editorName: string, date: string, hours: string, note: string | null) => void;
+    onPunchRollChange: (editorName: string, value: 'P' | 'R' | '') => void;
     onDeleteRow: (editorName: string) => void;
-}> = ({ editorName, isNew, weekDays, projectLogs, onLogChange, onEditorSelect, onDeleteRow }) => {
+}> = ({ editorName, isNew, weekDays, punchOrRoll, projectLogs, onLogChange, onPunchRollChange, onDeleteRow }) => {
     const [selectedEditor, setSelectedEditor] = useState(editorName);
 
-    const availableEditors = useMemo(() => {
-        return editors.sort();
-    }, []);
-    
     const handleHourChange = (date: string, value: string) => {
-        if(!selectedEditor && isNew) {
+        if (!selectedEditor && isNew) {
             alert("Please select an editor first.");
             return;
         }
-        onLogChange(selectedEditor, date, value);
+        onLogChange(selectedEditor, date, value, projectLogs[date]?.note || null);
+    };
+    
+    const handleNoteChange = (date: string, note: string) => {
+        if (!selectedEditor && isNew) {
+            alert("Please select an editor first.");
+            return;
+        }
+        onLogChange(selectedEditor, date, projectLogs[date]?.hours || '0', note);
     };
 
     const handleEditorChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
         const newEditor = e.target.value;
-        if(isNew) {
-            setSelectedEditor(newEditor);
-        } else {
-            onEditorSelect(selectedEditor, newEditor);
-        }
+        if(isNew) setSelectedEditor(newEditor);
     };
     
+    const handlePRChange = (e: React.ChangeEvent<HTMLSelectElement>) => {
+         if (!selectedEditor && isNew) {
+            alert("Please select an editor first.");
+            return;
+        }
+        onPunchRollChange(selectedEditor, e.target.value as 'P' | 'R' | '');
+    };
+
     return (
          <tr className={isNew ? "bg-gray-50" : "bg-white"}>
             <td className="px-2 py-2 w-1/4">
                 {isNew ? (
                      <select value={selectedEditor} onChange={handleEditorChange} className="w-full p-1.5 border border-gray-300 rounded-md text-sm">
                         <option value="">Select Editor...</option>
-                        {availableEditors.map(e => <option key={e} value={e}>{e}</option>)}
+                        {editors.sort().map(e => <option key={e} value={e}>{e}</option>)}
                     </select>
                 ) : (
                     <span className="font-semibold text-gray-800">{editorName}</span>
                 )}
             </td>
+            <td className="px-2 py-2">
+                 <select value={punchOrRoll} onChange={handlePRChange} className="w-full p-1.5 border border-gray-300 rounded-md text-sm" disabled={isNew && !selectedEditor}>
+                    <option value=""></option>
+                    <option value="P">P</option>
+                    <option value="R">R</option>
+                </select>
+            </td>
             {weekDays.map(day => {
                 const dateStr = formatDate(day);
                 return (
                     <td key={dateStr} className="px-1 py-1">
-                        <input
-                            type="text"
-                            inputMode="decimal"
-                            value={projectLogs[dateStr] || ''}
-                            onChange={e => handleHourChange(dateStr, e.target.value)}
-                            className="w-full p-1.5 text-center rounded border border-gray-300 focus:outline-none focus:ring-1 focus:ring-indigo-500"
-                            placeholder="0"
+                        <DailyLogInput
+                            hours={projectLogs[dateStr]?.hours || ''}
+                            note={projectLogs[dateStr]?.note || null}
+                            onHoursChange={(hours) => handleHourChange(dateStr, hours)}
+                            onNoteChange={(note) => handleNoteChange(dateStr, note)}
                             disabled={isNew && !selectedEditor}
                         />
                     </td>
                 );
             })}
             <td className="px-2 py-2 font-semibold text-center text-gray-700">
-                {Object.values(projectLogs).reduce((acc, h) => acc + (parseFloat(h) || 0), 0).toFixed(2)}
+                {Object.values(projectLogs).reduce((acc, log) => acc + (parseFloat(log.hours) || 0), 0).toFixed(2)}
             </td>
             <td className="px-2 py-2 text-center w-12">
                 {!isNew && (
@@ -891,59 +1002,68 @@ const ProjectTimeLogCard: React.FC<{
         return allLogs.filter(log => log.project_id === project.id && log.date >= fromDate && log.date <= toDate);
     }, [allLogs, project.id, weekDays]);
     
-    const logsByEditor = useMemo(() => {
-        return projectLogsForWeek.reduce((acc, log) => {
+    const logsByEditorAndDay = useMemo(() => {
+        const result = projectLogsForWeek.reduce((acc, log) => {
             if (!acc[log.editor_name]) {
                 acc[log.editor_name] = {};
             }
-            acc[log.editor_name][log.date] = log.hours_worked;
+            acc[log.editor_name][log.date] = { hours_worked: log.hours_worked, log_note: log.log_note, punch_or_roll: log.punch_or_roll };
             return acc;
-        }, {} as Record<string, Record<string, number>>);
-    }, [projectLogsForWeek]);
+        }, {} as Record<string, Record<string, Partial<ProductivityLog>>>);
 
-    // Local state for responsive inputs, using strings to avoid cursor jumping
-    const [localLogs, setLocalLogs] = useState<Record<string, Record<string, string>>>(() => {
-        const initial: Record<string, Record<string, string>> = {};
-        for (const editor in logsByEditor) {
-            initial[editor] = {};
-            for (const date in logsByEditor[editor]) {
-                initial[editor][date] = String(logsByEditor[editor][date]);
-            }
+        if (project.editor && !result[project.editor]) {
+           result[project.editor] = {};
         }
-        return initial;
-    });
+
+        return result;
+    }, [projectLogsForWeek, project.editor]);
+    
+    const [localLogs, setLocalLogs] = useState<Record<string, Record<string, { hours: string; note: string | null }>>>({});
+    const [punchRollValues, setPunchRollValues] = useState<Record<string, 'P' | 'R' | ''>>({});
     const [localRaw, setLocalRaw] = useState<string>(String(project.remaining_raw ?? ''));
 
-    // Sync local state with props, but ONLY if the user is not actively editing in this card.
     useEffect(() => {
         if (!cardRef.current?.contains(document.activeElement)) {
-            const newLogs: Record<string, Record<string, string>> = {};
-            for (const editor in logsByEditor) {
+            const newLogs: Record<string, Record<string, { hours: string; note: string | null }>> = {};
+            const newPRs: Record<string, 'P' | 'R' | ''> = {};
+            
+            for (const editor in logsByEditorAndDay) {
                 newLogs[editor] = {};
-                for (const date in logsByEditor[editor]) {
-                    newLogs[editor][date] = String(logsByEditor[editor][date]);
+                let prValue: 'P' | 'R' | '' = '';
+                for (const date in logsByEditorAndDay[editor]) {
+                    const log = logsByEditorAndDay[editor][date];
+                    newLogs[editor][date] = {
+                        hours: String(log.hours_worked || ''),
+                        note: log.log_note || null,
+                    };
+                    if (log.punch_or_roll) {
+                        prValue = log.punch_or_roll;
+                    }
                 }
+                newPRs[editor] = prValue;
             }
             setLocalLogs(newLogs);
+            setPunchRollValues(newPRs);
         }
-    }, [logsByEditor]);
+    }, [logsByEditorAndDay]);
 
     useEffect(() => {
         if (!cardRef.current?.contains(document.activeElement)) {
             setLocalRaw(String(project.remaining_raw ?? ''));
         }
     }, [project.remaining_raw]);
-
-    // Stable debounced functions using useRef to prevent re-creation on every render
-    const debouncedSaveLog = useRef(debounce(async (editorName: string, date: string, hours: number) => {
-        const upsertData: ProductivityLog = {
+    
+    const debouncedSaveLog = useRef(debounce(async (editorName: string, date: string, hours: number, note: string | null, punchOrRoll: 'P' | 'R' | '') => {
+        const upsertData: Omit<ProductivityLog, 'id'> = {
             project_id: project.id,
             editor_name: editorName,
             date,
-            hours_worked: hours
+            hours_worked: hours,
+            log_note: note,
+            punch_or_roll: punchOrRoll || null
         };
         
-        if (hours > 0) {
+        if (hours > 0 || (note && note.trim())) {
             await supabase.from('productivity_logs').upsert(upsertData, { onConflict: 'editor_name,project_id,date' });
         } else {
             await supabase.from('productivity_logs').delete().match({ project_id: project.id, editor_name: editorName, date });
@@ -954,57 +1074,65 @@ const ProjectTimeLogCard: React.FC<{
         onUpdateProjectField(project.id, 'remaining_raw', value);
     }, 750)).current;
 
-    const handleLogChange = (editorName: string, date: string, hoursString: string) => {
-        // Update local string state immediately for a responsive UI
+    const handleLogChange = (editorName: string, date: string, hoursString: string, note: string | null) => {
         setLocalLogs(prev => {
-            const newLogs = JSON.parse(JSON.stringify(prev)); // Deep copy for safety
+            const newLogs = JSON.parse(JSON.stringify(prev));
             if (!newLogs[editorName]) newLogs[editorName] = {};
-            newLogs[editorName][date] = hoursString;
+            if (!newLogs[editorName][date]) newLogs[editorName][date] = { hours: '', note: null };
+            newLogs[editorName][date] = { hours: hoursString, note };
             return newLogs;
         });
 
         const hours = parseFloat(hoursString);
-        if (!isNaN(hours)) {
-            debouncedSaveLog(editorName, date, hours);
+        const currentPR = punchRollValues[editorName] || '';
+        
+        if (!isNaN(hours) || (note && note.trim())) {
+            debouncedSaveLog(editorName, date, isNaN(hours) ? 0 : hours, note, currentPR);
         } else if (hoursString === '' || hoursString === '.') {
-            debouncedSaveLog(editorName, date, 0);
+            debouncedSaveLog(editorName, date, 0, note, currentPR);
         }
     };
     
-    const handleRawUpdate = (e: React.ChangeEvent<HTMLInputElement>) => {
-        const value = e.target.value;
-        setLocalRaw(value); // Update local string state immediately
+    const handlePunchRollChange = async (editorName: string, value: 'P' | 'R' | '') => {
+        setPunchRollValues(prev => ({ ...prev, [editorName]: value }));
         
-        const numericValue = parseFloat(value);
-        if (!isNaN(numericValue)) {
-            debouncedSaveRaw(numericValue);
-        } else if (value === '' || value === '.') {
-            debouncedSaveRaw(0);
-        }
-    };
-
-    const handleDeleteRequest = (editorName: string) => {
-        setEditorToDelete(editorName);
-    };
-
-    const handleConfirmDeleteLogs = async () => {
-        if (!editorToDelete) return;
-
         const fromDate = formatDate(weekDays[0]);
         const toDate = formatDate(weekDays[4]);
 
+        const { error } = await supabase
+            .from('productivity_logs')
+            .update({ punch_or_roll: value || null })
+            .match({ project_id: project.id, editor_name: editorName })
+            .gte('date', fromDate)
+            .lte('date', toDate);
+
+        if (error) {
+            alert(`Failed to update Punch/Roll status: ${error.message}`);
+        }
+    };
+
+    const handleRawUpdate = (e: React.ChangeEvent<HTMLInputElement>) => {
+        const value = e.target.value;
+        setLocalRaw(value);
+        const numericValue = parseFloat(value);
+        if (!isNaN(numericValue)) debouncedSaveRaw(numericValue);
+        else if (value === '' || value === '.') debouncedSaveRaw(0);
+    };
+
+    const handleDeleteRequest = (editorName: string) => setEditorToDelete(editorName);
+
+    const handleConfirmDeleteLogs = async () => {
+        if (!editorToDelete) return;
+        const fromDate = formatDate(weekDays[0]);
+        const toDate = formatDate(weekDays[4]);
         const { error } = await supabase
             .from('productivity_logs')
             .delete()
             .match({ project_id: project.id, editor_name: editorToDelete })
             .gte('date', fromDate)
             .lte('date', toDate);
-
-        if (error) {
-            alert(`Failed to delete logs: ${error.message}`);
-        }
-
-        setEditorToDelete(null); // Close the modal
+        if (error) alert(`Failed to delete logs: ${error.message}`);
+        setEditorToDelete(null);
     };
 
     const projectTotalForWeek = projectLogsForWeek.reduce((sum, log) => sum + log.hours_worked, 0);
@@ -1039,22 +1167,24 @@ const ProjectTimeLogCard: React.FC<{
                      <table className="w-full text-sm">
                         <thead className="text-xs text-gray-700 uppercase bg-gray-100">
                              <tr>
-                                <th className="px-2 py-3 text-left">Editor</th>
-                                {weekDays.map(day => <th key={day.toISOString()} className="px-1 py-3 text-center w-20">{day.toLocaleDateString('en-US', { weekday: 'short' })}</th>)}
+                                <th className="px-2 py-3 text-left w-1/4">Editor</th>
+                                <th className="px-2 py-3 text-left w-20">P/R</th>
+                                {weekDays.map(day => <th key={day.toISOString()} className="px-1 py-3 text-center w-24">{day.toLocaleDateString('en-US', { weekday: 'short' })}</th>)}
                                 <th className="px-2 py-3 text-center">Total</th>
                                 <th className="px-2 py-3 text-center w-12"></th>
                             </tr>
                         </thead>
                         <tbody>
-                            {Object.keys(localLogs).sort().map(editorName => (
+                            {Object.keys(logsByEditorAndDay).sort().map(editorName => (
                                 <TimeLogEntryRow 
                                     key={editorName}
                                     editorName={editorName}
                                     isNew={false}
                                     weekDays={weekDays}
-                                    projectLogs={localLogs[editorName]}
+                                    punchOrRoll={punchRollValues[editorName] || ''}
+                                    projectLogs={localLogs[editorName] || {}}
                                     onLogChange={handleLogChange}
-                                    onEditorSelect={()=>{}} // Not used for existing rows
+                                    onPunchRollChange={handlePunchRollChange}
                                     onDeleteRow={handleDeleteRequest}
                                 />
                             ))}
@@ -1062,10 +1192,11 @@ const ProjectTimeLogCard: React.FC<{
                                 editorName=""
                                 isNew={true}
                                 weekDays={weekDays}
+                                punchOrRoll=""
                                 projectLogs={{}}
                                 onLogChange={handleLogChange}
-                                onEditorSelect={()=>{}} // Not used for new rows
-                                onDeleteRow={() => {}} // No delete on new row
+                                onPunchRollChange={handlePunchRollChange}
+                                onDeleteRow={() => {}}
                             />
                         </tbody>
                     </table>
