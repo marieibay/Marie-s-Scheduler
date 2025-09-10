@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Project, ViewMode, ProductivityLog, QCProductivityLog } from './types';
 import { supabase } from './supabaseClient';
@@ -672,24 +673,41 @@ const App: React.FC = () => {
     }, [projects, isNewEditColumnMissing]);
 
     const handleHistoricalCorrection = useCallback(async (projectId: number, hours: number) => {
-        const project = projects.find(p => p.id === projectId);
-        if (!project) return;
-        
-        const correctionLog: ProductivityLog = {
-            project_id: projectId,
-            editor_name: 'Historical Correction',
-            date: '2000-01-01',
-            hours_worked: hours,
-        };
-
-        const { error } = await supabase
+        // First, delete any existing historical correction log for this project.
+        // This ensures we are setting the value, not adding to it.
+        const { error: deleteError } = await supabase
             .from('productivity_logs')
-            .upsert(correctionLog, { onConflict: 'editor_name,project_id,date' });
+            .delete()
+            .match({
+                project_id: projectId,
+                editor_name: 'Historical Correction',
+                date: '2000-01-01'
+            });
 
-        if (error) {
-            alert(`Failed to save correction: ${error.message}`);
+        if (deleteError) {
+            alert(`Failed to clear previous correction: ${deleteError.message}`);
+            return;
         }
-    }, [projects]);
+
+        // If the user entered a positive number of hours, insert a new record.
+        // If they entered 0, we just wanted to delete the old one.
+        if (hours > 0) {
+            const correctionLog: Omit<ProductivityLog, 'id'> = {
+                project_id: projectId,
+                editor_name: 'Historical Correction',
+                date: '2000-01-01',
+                hours_worked: hours,
+            };
+
+            const { error: insertError } = await supabase
+                .from('productivity_logs')
+                .insert(correctionLog);
+
+            if (insertError) {
+                alert(`Failed to save new correction: ${insertError.message}`);
+            }
+        }
+    }, []);
 
 
     // --- ROUTING ---
