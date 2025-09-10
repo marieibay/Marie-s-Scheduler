@@ -673,39 +673,60 @@ const App: React.FC = () => {
     }, [projects, isNewEditColumnMissing]);
 
     const handleHistoricalCorrection = useCallback(async (projectId: number, hours: number) => {
-        // First, delete any existing historical correction log for this project.
-        // This ensures we are setting the value, not adding to it.
+        // This function now manually updates the local state for an immediate UI response,
+        // making it more robust and not solely reliant on real-time database events.
+    
+        // First, delete any existing historical correction log for this project from the DB.
         const { error: deleteError } = await supabase
             .from('productivity_logs')
             .delete()
             .match({
                 project_id: projectId,
                 editor_name: 'Historical Correction',
-                date: '2000-01-01'
             });
-
+    
         if (deleteError) {
             alert(`Failed to clear previous correction: ${deleteError.message}`);
+            // If the DB operation fails, we don't touch the local state.
             return;
         }
-
-        // If the user entered a positive number of hours, insert a new record.
-        // If they entered 0, we just wanted to delete the old one.
-        if (hours > 0) {
-            const correctionLog: Omit<ProductivityLog, 'id'> = {
-                project_id: projectId,
-                editor_name: 'Historical Correction',
-                date: '2000-01-01',
-                hours_worked: hours,
-            };
-
-            const { error: insertError } = await supabase
-                .from('productivity_logs')
-                .insert(correctionLog);
-
-            if (insertError) {
-                alert(`Failed to save new correction: ${insertError.message}`);
-            }
+    
+        // If hours are 0 or less, we are just deleting.
+        // Update local state to reflect the deletion.
+        if (hours <= 0) {
+            setProductivityLogs(currentLogs => 
+                currentLogs.filter(log => !(log.project_id === projectId && log.editor_name === 'Historical Correction'))
+            );
+            return; // We are done.
+        }
+    
+        // If we have positive hours, we insert a new record.
+        const correctionLog: Omit<ProductivityLog, 'id'> = {
+            project_id: projectId,
+            editor_name: 'Historical Correction',
+            date: '2000-01-01', // A fixed, back-dated date for these special logs.
+            hours_worked: hours,
+        };
+    
+        const { data: newLog, error: insertError } = await supabase
+            .from('productivity_logs')
+            .insert(correctionLog)
+            .select()
+            .single();
+    
+        if (insertError) {
+            alert(`Failed to save new correction: ${insertError.message}`);
+            // After a failed insert, it's safest to refetch all logs to ensure UI consistency.
+            const { data, error } = await supabase.from('productivity_logs').select('*');
+            if (error) console.error('Error re-fetching logs:', error.message);
+            else setProductivityLogs(data || []);
+    
+        } else if (newLog) {
+            // On successful insert, update local state: remove any old correction and add the new one.
+            setProductivityLogs(currentLogs => [
+                ...currentLogs.filter(log => !(log.project_id === projectId && log.editor_name === 'Historical Correction')),
+                newLog
+            ]);
         }
     }, []);
 
