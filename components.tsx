@@ -1388,7 +1388,12 @@ export const PersonalStatsView: React.FC<{ allLogs: ProductivityLog[]; selectedE
 
 export const TeamProductivityView: React.FC = () => {
     const [currentDate, setCurrentDate] = useState(new Date());
-    const [teamLogs, setTeamLogs] = useState<Record<string, number>>({});
+    interface TeamLogSummary {
+        total: number;
+        punch: number;
+        roll: number;
+    }
+    const [teamLogs, setTeamLogs] = useState<Record<string, TeamLogSummary>>({});
     const [viewMode, setViewMode] = useState<'week' | 'month'>('week');
 
     const { dateRange, label } = useMemo(() => {
@@ -1415,15 +1420,24 @@ export const TeamProductivityView: React.FC = () => {
         const fetchLogs = async () => {
             const { data } = await supabase
                 .from('productivity_logs')
-                .select('editor_name, hours_worked')
+                .select('editor_name, hours_worked, punch_or_roll')
                 .gte('date', formatDate(dateRange.start))
                 .lte('date', formatDate(dateRange.end));
             
             if (data) {
                 const summary = data.reduce((acc, log) => {
-                    acc[log.editor_name] = (acc[log.editor_name] || 0) + log.hours_worked;
+                    const editor = log.editor_name;
+                    if (!acc[editor]) {
+                        acc[editor] = { total: 0, punch: 0, roll: 0 };
+                    }
+                    acc[editor].total += log.hours_worked;
+                    if (log.punch_or_roll === 'P') {
+                        acc[editor].punch += log.hours_worked;
+                    } else if (log.punch_or_roll === 'R') {
+                        acc[editor].roll += log.hours_worked;
+                    }
                     return acc;
-                }, {} as Record<string, number>);
+                }, {} as Record<string, TeamLogSummary>);
                 setTeamLogs(summary);
             }
         };
@@ -1438,10 +1452,15 @@ export const TeamProductivityView: React.FC = () => {
         setCurrentDate(d);
     };
 
-    const sortedEditors = useMemo(() => editors.sort((a,b) => (teamLogs[b] || 0) - (teamLogs[a] || 0)), [teamLogs]);
+    const sortedEditors = useMemo(() => editors.sort((a,b) => (teamLogs[b]?.total || 0) - (teamLogs[a]?.total || 0)), [teamLogs]);
     
-    const totalHours = useMemo(() => {
-        return Object.values(teamLogs).reduce((sum, hours) => sum + hours, 0);
+    const totals = useMemo(() => {
+        return Object.values(teamLogs).reduce((acc, log) => {
+            acc.total += log.total;
+            acc.punch += log.punch;
+            acc.roll += log.roll;
+            return acc;
+        }, { total: 0, punch: 0, roll: 0 });
     }, [teamLogs]);
 
     return (
@@ -1463,7 +1482,12 @@ export const TeamProductivityView: React.FC = () => {
                         <h4 className="text-lg font-semibold text-gray-800">Total Team Hours</h4>
                         <p className="text-sm text-gray-500">For {viewMode === 'week' ? 'this week' : 'this month'}</p>
                     </div>
-                    <p className="text-3xl font-bold text-indigo-600">{totalHours.toFixed(2)}</p>
+                    <div className="text-right">
+                        <p className="text-3xl font-bold text-indigo-600">{totals.total.toFixed(2)}</p>
+                        <p className="text-xs text-gray-500 mt-1">
+                            <span className="font-semibold">Punch:</span> {totals.punch.toFixed(2)} hrs / <span className="font-semibold">Roll:</span> {totals.roll.toFixed(2)} hrs
+                        </p>
+                    </div>
                 </div>
 
                 <div className="overflow-y-auto" style={{ maxHeight: 'calc(100vh - 380px)' }}>
@@ -1471,16 +1495,23 @@ export const TeamProductivityView: React.FC = () => {
                         <thead className="text-xs text-gray-700 uppercase bg-gray-100 sticky top-0 z-10">
                             <tr>
                                 <th className="px-6 py-3">Editor</th>
-                                <th className="px-6 py-3">Total Hours Logged</th>
+                                <th className="px-6 py-3 text-right">Punch Hours</th>
+                                <th className="px-6 py-3 text-right">Roll Hours</th>
+                                <th className="px-6 py-3 text-right">Total Hours</th>
                             </tr>
                         </thead>
                         <tbody>
-                            {sortedEditors.map(editor => (
+                            {sortedEditors.map(editor => {
+                                const logs = teamLogs[editor] || { total: 0, punch: 0, roll: 0 };
+                                return (
                                 <tr key={editor} className="bg-white border-b hover:bg-gray-50">
                                     <td className="px-6 py-4 font-semibold text-gray-900">{editor}</td>
-                                    <td className="px-6 py-4 font-bold text-lg">{(teamLogs[editor] || 0).toFixed(2)}</td>
+                                    <td className="px-6 py-4 font-medium text-gray-700 text-right">{logs.punch.toFixed(2)}</td>
+                                    <td className="px-6 py-4 font-medium text-gray-700 text-right">{logs.roll.toFixed(2)}</td>
+                                    <td className="px-6 py-4 font-bold text-lg text-right">{logs.total.toFixed(2)}</td>
                                 </tr>
-                            ))}
+                                );
+                            })}
                         </tbody>
                     </table>
                 </div>
