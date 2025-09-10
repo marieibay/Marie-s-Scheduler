@@ -94,6 +94,25 @@ function debounce<F extends (...args: any[]) => any>(func: F, waitFor: number) {
 // Hours Breakdown Tooltip
 const HoursBreakdownTooltip: React.FC<{ breakdown?: Record<string, number> }> = ({ breakdown }) => {
     if (!breakdown) return null;
+
+    const historicalCorrection = breakdown['Historical Correction'];
+
+    if (typeof historicalCorrection !== 'undefined') {
+        return (
+            <div className="absolute z-20 w-56 p-2 text-sm font-normal text-left text-gray-700 bg-white border border-gray-200 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none -translate-x-1/2 left-1/2 -top-2 translate-y-[-100%]">
+                <h4 className="font-semibold mb-1 border-b pb-1">Historical Correction Active</h4>
+                <p className="text-xs text-gray-500 my-2">The total has been manually set. This value overrides all other time logs for this project.</p>
+                <ul className="space-y-1 mt-2">
+                    <li className="flex justify-between">
+                        <span>Corrected Total:</span>
+                        <strong className="text-base">{historicalCorrection.toFixed(2)}h</strong>
+                    </li>
+                </ul>
+                <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-gray-200"></div>
+            </div>
+        );
+    }
+
     const sortedEditors = Object.keys(breakdown).sort((a, b) => breakdown[b] - breakdown[a]);
 
     if (sortedEditors.length === 0) {
@@ -347,7 +366,7 @@ const HistoricalCorrectionModal: React.FC<HistoricalCorrectionModalProps> = ({ p
                             className="w-full p-2 border border-gray-300 rounded-md shadow-sm"
                             placeholder="e.g., 1.75"
                         />
-                         <p className="text-xs text-gray-400 mt-2 text-left">This will create a single, back-dated log entry to restore the project's total. This does not affect any hours already logged in the new system.</p>
+                         <p className="text-xs text-gray-400 mt-2 text-left">This will create a single log entry that overrides the project's total edited hours. It will take precedence over any other hours logged in the system.</p>
                     </div>
                     <div className="items-center px-4 py-3 space-x-4">
                         <button onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Cancel</button>
@@ -587,6 +606,12 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onD
     
     const calculatedTotalEdited = useMemo(() => {
         if (!productivityBreakdown) return 0;
+        
+        const historicalCorrection = productivityBreakdown['Historical Correction'];
+        if (typeof historicalCorrection !== 'undefined') {
+            return historicalCorrection;
+        }
+
         return Object.values(productivityBreakdown).reduce((sum, hours) => sum + hours, 0);
     }, [productivityBreakdown]);
 
@@ -752,7 +777,12 @@ export const EditorView: React.FC<Omit<ViewProps, 'onDelete' | 'onHistoricalCorr
                 </thead>
                 <tbody>
                     {projects.map((project) => {
-                        const calculatedTotalEdited = Object.values(productivityByProject?.[project.id] || {}).reduce((sum, h) => sum + h, 0);
+                        const productivityBreakdown = productivityByProject?.[project.id];
+                        const historicalCorrection = productivityBreakdown ? productivityBreakdown['Historical Correction'] : undefined;
+                        const calculatedTotalEdited = typeof historicalCorrection !== 'undefined'
+                            ? historicalCorrection
+                            : Object.values(productivityBreakdown || {}).reduce((sum, h) => sum + h, 0);
+
                         return (
                             <tr key={project.id} className={`border-b hover:bg-gray-50 ${project.is_on_hold ? 'bg-pink-100' : 'bg-white'}`}>
                                 <td className="px-6 py-4 font-semibold text-gray-900">{getClientName(project)}</td>
