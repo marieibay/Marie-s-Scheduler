@@ -178,7 +178,7 @@ const QCProjectTimeLogCard: React.FC<{
         };
         
         if (hours > 0) {
-            const { error } = await supabase.from('qc_productivity_logs').upsert(upsertData, { onConflict: 'project_id,qc_name,date' });
+            const { error } = await supabase.from('qc_productivity_logs').upsert(upsertData, { onConflict: 'qc_name,project_id,date' });
             if (error) console.error('Error saving QC log:', error.message);
         } else {
             const { error } = await supabase.from('qc_productivity_logs').delete().match({ project_id: project.id, qc_name: qcName, date });
