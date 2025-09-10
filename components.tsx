@@ -94,24 +94,6 @@ function debounce<F extends (...args: any[]) => any>(func: F, waitFor: number) {
 const HoursBreakdownTooltip: React.FC<{ breakdown?: Record<string, number> }> = ({ breakdown }) => {
     if (!breakdown) return null;
 
-    const historicalCorrection = breakdown['Historical Correction'];
-
-    if (typeof historicalCorrection !== 'undefined') {
-        return (
-            <div className="absolute z-20 w-56 p-2 text-sm font-normal text-left text-gray-700 bg-white border border-gray-200 rounded-lg shadow-lg opacity-0 group-hover:opacity-100 transition-opacity duration-300 pointer-events-none -translate-x-1/2 left-1/2 -top-2 translate-y-[-100%]">
-                <h4 className="font-semibold mb-1 border-b pb-1">Historical Correction Active</h4>
-                <p className="text-xs text-gray-500 my-2">The total has been manually set. This value overrides all other time logs for this project.</p>
-                <ul className="space-y-1 mt-2">
-                    <li className="flex justify-between">
-                        <span>Corrected Total:</span>
-                        <strong className="text-base">{historicalCorrection.toFixed(2)}h</strong>
-                    </li>
-                </ul>
-                <div className="absolute left-1/2 -translate-x-1/2 top-full w-0 h-0 border-x-4 border-x-transparent border-t-4 border-t-gray-200"></div>
-            </div>
-        );
-    }
-
     const sortedEditors = Object.keys(breakdown).sort((a, b) => breakdown[b] - breakdown[a]);
 
     if (sortedEditors.length === 0) {
@@ -355,7 +337,7 @@ const HistoricalCorrectionModal: React.FC<HistoricalCorrectionModalProps> = ({ p
                     <p className="text-sm text-gray-500 mt-2 px-4">For project: <strong>{project.title}</strong></p>
                     <div className="mt-4 px-7 py-3">
                         <label htmlFor="historical-hours" className="block text-sm font-medium text-gray-700 text-left mb-1">
-                            Enter total hours logged before the new system
+                            Enter the correct total edited hours
                         </label>
                         <input
                             type="number"
@@ -363,9 +345,9 @@ const HistoricalCorrectionModal: React.FC<HistoricalCorrectionModalProps> = ({ p
                             value={hours}
                             onChange={(e) => setHours(e.target.value)}
                             className="w-full p-2 border border-gray-300 rounded-md shadow-sm"
-                            placeholder="e.g., 1.75"
+                            placeholder="e.g., 8.5"
                         />
-                         <p className="text-xs text-gray-400 mt-2 text-left">This will create a single log entry that overrides the project's total edited hours. It will take precedence over any other hours logged in the system.</p>
+                         <p className="text-xs text-gray-400 mt-2 text-left">This will create a historical adjustment log to make the project's total match the value you enter. Any new hours logged will be added to this corrected total.</p>
                     </div>
                     <div className="items-center px-4 py-3 space-x-4">
                         <button onClick={onClose} className="px-4 py-2 bg-gray-200 text-gray-800 rounded-md hover:bg-gray-300">Cancel</button>
@@ -605,12 +587,6 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onD
     
     const calculatedTotalEdited = useMemo(() => {
         if (!productivityBreakdown) return 0;
-        
-        const historicalCorrection = productivityBreakdown['Historical Correction'];
-        if (typeof historicalCorrection !== 'undefined') {
-            return historicalCorrection;
-        }
-
         return Object.values(productivityBreakdown).reduce((sum, hours) => sum + hours, 0);
     }, [productivityBreakdown]);
 
@@ -777,10 +753,7 @@ export const EditorView: React.FC<Omit<ViewProps, 'onDelete' | 'onHistoricalCorr
                 <tbody>
                     {projects.map((project) => {
                         const productivityBreakdown = productivityByProject?.[project.id];
-                        const historicalCorrection = productivityBreakdown ? productivityBreakdown['Historical Correction'] : undefined;
-                        const calculatedTotalEdited = typeof historicalCorrection !== 'undefined'
-                            ? historicalCorrection
-                            : Object.values(productivityBreakdown || {}).reduce((sum, h) => sum + h, 0);
+                        const calculatedTotalEdited = Object.values(productivityBreakdown || {}).reduce((sum, h) => sum + h, 0);
 
                         return (
                             <tr key={project.id} className={`border-b hover:bg-gray-50 ${project.is_on_hold ? 'bg-pink-100' : 'bg-white'}`}>

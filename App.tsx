@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Project, ViewMode, ProductivityLog, QCProductivityLog } from './types';
 import { supabase } from './supabaseClient';
@@ -682,59 +681,52 @@ const App: React.FC = () => {
         }
     }, [projects, isNewEditColumnMissing]);
 
-    const handleHistoricalCorrection = useCallback(async (projectId: number, hours: number) => {
+    const handleHistoricalCorrection = useCallback(async (projectId: number, targetTotalHours: number) => {
+        const currentNonAdjustmentHours = productivityLogs
+            .filter(log => log.project_id === projectId && log.editor_name !== 'Historical Adjustment')
+            .reduce((sum, log) => sum + log.hours_worked, 0);
+        
+        const adjustmentValue = targetTotalHours - currentNonAdjustmentHours;
+
         const { error: deleteError } = await supabase
             .from('productivity_logs')
             .delete()
-            .match({ project_id: projectId, editor_name: 'Historical Correction' });
-    
+            .match({ project_id: projectId, editor_name: 'Historical Adjustment' });
+
         if (deleteError) {
-            alert(`Failed to clear previous correction: ${deleteError.message}`);
+            alert(`Failed to clear previous adjustment: ${deleteError.message}`);
             return;
         }
-    
-        // If we are just clearing the value, update state and we're done.
-        if (hours <= 0) {
-            setProductivityLogs(currentLogs =>
-                currentLogs.filter(log => !(log.project_id === projectId && log.editor_name === 'Historical Correction'))
-            );
-            return;
-        }
-    
-        // Otherwise, insert the new value.
-        const correctionLog: Omit<ProductivityLog, 'id'> = {
+        
+        const adjustmentLog: Omit<ProductivityLog, 'id'> = {
             project_id: projectId,
-            editor_name: 'Historical Correction',
+            editor_name: 'Historical Adjustment',
             date: '2000-01-01',
-            hours_worked: hours,
+            hours_worked: adjustmentValue,
         };
-    
+
         const { data: newLog, error: insertError } = await supabase
             .from('productivity_logs')
-            .insert(correctionLog)
+            .insert(adjustmentLog)
             .select()
             .single();
-        
+
         if (insertError) {
-            alert(`Failed to save new correction: ${insertError.message}`);
-            // On failure, refetch all logs to ensure we don't have a corrupt state.
+            alert(`Failed to save new adjustment: ${insertError.message}`);
             fetchLogs();
             return;
         }
-    
+        
         if (newLog) {
-            // Happy path: insert worked and returned the new log. Update state manually.
             setProductivityLogs(currentLogs => [
-                ...currentLogs.filter(log => !(log.project_id === projectId && log.editor_name === 'Historical Correction')),
+                ...currentLogs.filter(log => !(log.project_id === projectId && log.editor_name === 'Historical Adjustment')),
                 newLog,
             ]);
         } else {
-            // Fallback: insert may have worked but didn't return the new row.
-            // The UI would be out of sync, so we refetch all logs to guarantee consistency.
-            console.warn('Historical correction saved, but could not retrieve the new record. Refetching logs.');
+            console.warn('Historical adjustment saved, but could not retrieve the new record. Refetching logs.');
             fetchLogs();
         }
-    }, [fetchLogs]);
+    }, [productivityLogs, fetchLogs]);
 
 
     // --- ROUTING ---
