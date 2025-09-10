@@ -239,12 +239,13 @@ const QCProjectTimeLogCard: React.FC<{
             return acc;
         }, {} as Record<string, Record<string, Partial<QCProductivityLog>>>);
         
-        if (selectedQC && project.pz_qc === selectedQC && !byQC[selectedQC]) {
-            byQC[selectedQC] = {};
+        // ALWAYS show the assigned PZ QC person, even if they have 0 hours logged this week.
+        if (project.pz_qc && !byQC[project.pz_qc]) {
+            byQC[project.pz_qc] = {};
         }
 
         return byQC;
-    }, [projectLogsForWeek, project.pz_qc, selectedQC]);
+    }, [projectLogsForWeek, project.pz_qc]);
 
     const [localLogs, setLocalLogs] = useState<Record<string, Record<string, { hours: string; note: string | null }>>>(() => {
         const initial: Record<string, Record<string, { hours: string; note: string | null }>> = {};
