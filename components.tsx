@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { Project, ProductivityLog } from './types';
 import { editors, masters, qcPersonnel } from './employees';
@@ -1167,6 +1166,13 @@ const ProjectTimeLogCard: React.FC<{
 
     const projectTotalForWeek = projectLogsForWeek.reduce((sum, log) => sum + log.hours_worked, 0);
 
+    const canEditRaw = useMemo(() => {
+        if (project.editor === selectedEditor) {
+            return true;
+        }
+        return allLogs.some(log => log.project_id === project.id && log.editor_name === selectedEditor);
+    }, [project.id, project.editor, selectedEditor, allLogs]);
+
     return (
         <div className="bg-white rounded-lg shadow transition-shadow hover:shadow-md" ref={cardRef}>
             <button onClick={() => setIsOpen(!isOpen)} className="w-full p-4 text-left flex justify-between items-center">
@@ -1181,7 +1187,7 @@ const ProjectTimeLogCard: React.FC<{
             </button>
             {isOpen && (
                 <div className="p-4 border-t border-gray-200">
-                    {project.editor === selectedEditor && (
+                    {canEditRaw && (
                         <div className="flex items-center gap-2 mb-4 p-3 bg-indigo-50 rounded-lg border border-indigo-200">
                              <label htmlFor={`raw-${project.id}`} className="text-sm font-semibold text-indigo-800">Remaining RAW:</label>
                              <input
