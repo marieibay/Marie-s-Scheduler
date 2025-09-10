@@ -407,6 +407,12 @@ const App: React.FC = () => {
     const newEditFailureDetected = useRef(false);
     const [isLoading, setIsLoading] = useState(true);
 
+    const fetchLogs = useCallback(async () => {
+        const { data, error } = await supabase.from('productivity_logs').select('*');
+        if (error) console.error('Error fetching logs:', error.message);
+        else setProductivityLogs(data || []);
+    }, []);
+
     // --- DATA FETCHING & REAL-TIME SUBSCRIPTIONS ---
     useEffect(() => {
         // Probe for QC table to determine if the feature is available
@@ -450,12 +456,6 @@ const App: React.FC = () => {
             else setDailyNotesContent(data?.content || '');
         };
         
-        const fetchLogs = async () => {
-            const { data, error } = await supabase.from('productivity_logs').select('*');
-            if (error) console.error('Error fetching logs:', error.message);
-            else setProductivityLogs(data || []);
-        };
-        
         const startup = async () => {
             await Promise.all([
                 probeForQcTable(),
@@ -493,10 +493,20 @@ const App: React.FC = () => {
 
         const logsChannel = supabase.channel('productivity_logs')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'productivity_logs' }, async (payload) => {
+                const newLog = payload.new as ProductivityLog;
                 if (payload.eventType === 'INSERT') {
-                    setProductivityLogs(current => [...current, payload.new as ProductivityLog]);
+                    setProductivityLogs(current => {
+                        if (current.some(l => l.id === newLog.id)) return current;
+                        return [...current, newLog];
+                    });
                 } else if (payload.eventType === 'UPDATE') {
-                    setProductivityLogs(current => current.map(l => l.id === payload.new.id ? payload.new as ProductivityLog : l));
+                    setProductivityLogs(current => {
+                        const logExists = current.some(l => l.id === newLog.id);
+                        if (logExists) {
+                            return current.map(l => l.id === newLog.id ? newLog : l);
+                        }
+                        return [...current, newLog];
+                    });
                 } else if (payload.eventType === 'DELETE') {
                     const deletedLog = payload.old as Partial<ProductivityLog>;
                     if (deletedLog.id) {
@@ -512,7 +522,7 @@ const App: React.FC = () => {
             supabase.removeChannel(notesChannel);
             supabase.removeChannel(logsChannel);
         };
-    }, []);
+    }, [fetchLogs]);
 
     // Effect for fetching and subscribing to QC data, ONLY if the feature is available.
     useEffect(() => {
@@ -708,9 +718,7 @@ const App: React.FC = () => {
         if (insertError) {
             alert(`Failed to save new correction: ${insertError.message}`);
             // On failure, refetch all logs to ensure we don't have a corrupt state.
-            const { data, error } = await supabase.from('productivity_logs').select('*');
-            if (error) console.error('Error fetching logs after failed insert:', error.message);
-            else setProductivityLogs(data || []);
+            fetchLogs();
             return;
         }
     
@@ -724,11 +732,9 @@ const App: React.FC = () => {
             // Fallback: insert may have worked but didn't return the new row.
             // The UI would be out of sync, so we refetch all logs to guarantee consistency.
             console.warn('Historical correction saved, but could not retrieve the new record. Refetching logs.');
-            const { data, error } = await supabase.from('productivity_logs').select('*');
-            if (error) console.error('Error fetching logs after missing select return:', error.message);
-            else setProductivityLogs(data || []);
+            fetchLogs();
         }
-    }, []);
+    }, [fetchLogs]);
 
 
     // --- ROUTING ---
