@@ -374,6 +374,9 @@ export const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ due_date, origin
     const textInputRef = useRef<HTMLInputElement>(null);
     const dateInputRef = useRef<HTMLInputElement>(null);
 
+    // Create a unique ID for the date picker input to link with the label
+    const datePickerId = useMemo(() => `date-picker-${Math.random().toString(36).substr(2, 9)}`, []);
+
     const formatDateForDisplay = (dateStr: string | null): string => {
         if (!dateStr) return 'MM/DD/YYYY';
         const date = new Date(dateStr + 'T00:00:00');
@@ -438,15 +441,9 @@ export const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ due_date, origin
     const handleNativeDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newDate = e.target.value;
         onUpdate(newDate || null);
-        if (newDate) setInputValue(formatDateForDisplay(newDate));
-        else setInputValue('');
+        setIsEditing(false);
     };
     
-    const showPicker = () => {
-        try { dateInputRef.current?.showPicker(); }
-        catch (error) { console.error("showPicker() is not supported by this browser.", error); }
-    };
-
     const alertIcon = useMemo(() => {
         if (!due_date) return null;
         const today = new Date();
@@ -481,22 +478,24 @@ export const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ due_date, origin
                         className="p-1 border border-indigo-400 rounded-md shadow-sm w-[120px] pr-8"
                         aria-label="Due date text input"
                      />
-                     <button 
-                        type="button" 
-                        onClick={showPicker}
-                        className="absolute right-0 top-0 h-full px-2 text-gray-500 hover:text-indigo-600"
+                     <label 
+                        htmlFor={datePickerId}
+                        onMouseDown={(e) => e.preventDefault()}
+                        className="absolute right-0 top-0 h-full px-2 flex items-center justify-center text-gray-500 hover:text-indigo-600 cursor-pointer"
                         aria-label="Open date picker"
                         title="Open date picker"
                     >
                          <CalendarIcon className="h-5 w-5" />
-                     </button>
+                     </label>
                  </div>
                  <input
+                    id={datePickerId}
                     ref={dateInputRef}
                     type="date"
                     value={formatDateForNativePicker(due_date)}
                     onChange={handleNativeDateChange}
-                    className="absolute w-0 h-0 -z-10 opacity-0 pointer-events-none"
+                    className="absolute w-px h-px -m-px p-0 overflow-hidden"
+                    style={{ clip: 'rect(0, 0, 0, 0)', whiteSpace: 'nowrap', borderWidth: 0 }}
                     tabIndex={-1}
                     aria-hidden="true"
                  />
