@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { Project, QCProductivityLog } from './types';
 import { qcPersonnel } from './employees';
@@ -456,11 +457,16 @@ export const QCPersonalStatsView: React.FC<{ allLogs: QCProductivityLog[]; selec
         const startStr = formatDate(startDate);
         const endStr = formatDate(endDate);
 
-        const logs = allLogs.filter(log =>
-            (log.qc_name || '').toLowerCase() === selectedQC.toLowerCase() &&
-            log.date >= startStr &&
-            log.date <= endStr
-        );
+        const logs = allLogs.filter(log => {
+            if (!log.qc_name) return false;
+            const normalizedLogName = log.qc_name.toLowerCase();
+            const selectedQCNormalized = selectedQC.toLowerCase();
+            
+            // Use forgiving startsWith logic to handle typos like 'Lauraine' vs 'Laurain'
+            const matches = normalizedLogName.startsWith(selectedQCNormalized) || selectedQCNormalized.startsWith(normalizedLogName);
+            
+            return matches && log.date >= startStr && log.date <= endStr;
+        });
 
         return { filteredLogs: logs, dateRangeLabel: label };
     }, [allLogs, selectedQC, timeframe, currentDate]);
@@ -579,8 +585,15 @@ export const QCTeamProductivityView: React.FC<{ allLogs: QCProductivityLog[] }> 
 
         const summary = logsInPeriod.reduce((acc, log) => {
             if (!log.qc_name) return acc;
-            // Normalize by finding the canonical name from the official list
-            const canonicalName = qcPersonnel.find(p => p.toLowerCase() === log.qc_name.toLowerCase());
+            
+            const normalizedLogName = log.qc_name.toLowerCase();
+
+            // Find the canonical name from the official list using more forgiving `startsWith` logic
+            const canonicalName = qcPersonnel.find(p => {
+                const normalizedCanonicalName = p.toLowerCase();
+                return normalizedLogName.startsWith(normalizedCanonicalName) || normalizedCanonicalName.startsWith(normalizedLogName);
+            });
+
             const key = canonicalName || log.qc_name; // Fallback to original name if not found
             acc[key] = (acc[key] || 0) + log.hours_worked;
             return acc;
