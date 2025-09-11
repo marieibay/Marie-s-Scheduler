@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { Project, ProductivityLog } from './types';
 import { editors, masters, qcPersonnel } from './employees';
@@ -604,9 +605,9 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onD
                 )}
                 <div className="flex flex-col md:flex-row md:items-start md:gap-6">
                     <div className="space-y-3 text-sm flex-grow">
-                        <div className="flex items-center gap-2"><strong className="text-gray-600 w-16 shrink-0 text-right">Editor:</strong><div className="flex-grow flex items-center gap-2"><div className="w-32 flex-shrink-0">{renderField(project.editor, 'editor', editors, 'Name...')}</div><div className="flex-1 min-w-0">{renderField(project.editor_note, 'editor_note', undefined, 'Note...', true)}</div></div></div>
-                        <div className="flex items-center gap-2"><strong className="text-gray-600 w-16 shrink-0 text-right">Master:</strong><div className="flex-grow flex items-center gap-2"><div className="w-32 flex-shrink-0">{renderField(project.master, 'master', masters, 'Name...')}</div><div className="flex-1 min-w-0">{renderField(project.master_note, 'master_note', undefined, 'Note...', true)}</div></div></div>
-                        <div className="flex items-center gap-2"><strong className="text-gray-600 w-16 shrink-0 text-right">PZ QC:</strong><div className="flex-grow flex items-center gap-2"><div className="w-32 flex-shrink-0">{renderField(project.pz_qc, 'pz_qc', qcPersonnel, 'Name...')}</div><div className="flex-1 min-w-0">{renderField(project.pz_qc_note, 'pz_qc_note', undefined, 'Note...', true)}</div></div></div>
+                        <div className="flex items-center gap-2"><strong className="text-gray-600 w-16 shrink-0 text-right">Editor:</strong><div className="flex-grow">{renderField(project.editor, 'editor', editors, 'Name...')}</div></div>
+                        <div className="flex items-center gap-2"><strong className="text-gray-600 w-16 shrink-0 text-right">Master:</strong><div className="flex-grow">{renderField(project.master, 'master', masters, 'Name...')}</div></div>
+                        <div className="flex items-center gap-2"><strong className="text-gray-600 w-16 shrink-0 text-right">PZ QC:</strong><div className="flex-grow">{renderField(project.pz_qc, 'pz_qc', qcPersonnel, 'Name...')}</div></div>
                     </div>
                     <div className="flex flex-row flex-wrap justify-start gap-2 pt-4 md:pt-0 flex-shrink-0">
                         <div className="bg-blue-50 p-2 rounded-lg w-24 text-center">
