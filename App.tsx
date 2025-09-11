@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Project, ViewMode, ProductivityLog, QCProductivityLog } from './types';
 import { supabase } from './supabaseClient';
@@ -401,6 +400,12 @@ const App: React.FC = () => {
         else setProductivityLogs(data || []);
     }, []);
 
+    const fetchQcLogs = useCallback(async () => {
+        const { data, error } = await supabase.from('qc_productivity_logs').select('*');
+        if (error) console.error('Error fetching QC logs:', error.message);
+        else setQcProductivityLogs(data || []);
+    }, []);
+
     // --- DATA FETCHING & REAL-TIME SUBSCRIPTIONS ---
     useEffect(() => {
         // Probe for QC table to determine if the feature is available
@@ -519,19 +524,24 @@ const App: React.FC = () => {
             return;
         }
 
-        const fetchQcLogs = async () => {
-            const { data, error } = await supabase.from('qc_productivity_logs').select('*');
-            if (error) console.error('Error fetching QC logs:', error.message);
-            else setQcProductivityLogs(data || []);
-        };
         fetchQcLogs();
 
         const qcLogsChannel = supabase.channel('qc_productivity_logs')
             .on('postgres_changes', { event: '*', schema: 'public', table: 'qc_productivity_logs' }, (payload) => {
+                const newLog = payload.new as QCProductivityLog;
                 if (payload.eventType === 'INSERT') {
-                    setQcProductivityLogs(current => [...current, payload.new as QCProductivityLog]);
+                    setQcProductivityLogs(current => {
+                        if (current.some(l => l.id === newLog.id)) return current;
+                        return [...current, newLog];
+                    });
                 } else if (payload.eventType === 'UPDATE') {
-                    setQcProductivityLogs(current => current.map(l => l.id === payload.new.id ? payload.new as QCProductivityLog : l));
+                    setQcProductivityLogs(current => {
+                        const logExists = current.some(l => l.id === newLog.id);
+                        if (logExists) {
+                            return current.map(l => l.id === newLog.id ? newLog : l);
+                        }
+                        return [...current, newLog];
+                    });
                 } else if (payload.eventType === 'DELETE') {
                     const deletedLog = payload.old as Partial<QCProductivityLog>;
                     if (deletedLog.id) {
@@ -545,7 +555,7 @@ const App: React.FC = () => {
         return () => {
             supabase.removeChannel(qcLogsChannel);
         };
-    }, [isQcFeatureAvailable]);
+    }, [isQcFeatureAvailable, fetchQcLogs]);
 
 
     const productivityByProject = useMemo(() => {

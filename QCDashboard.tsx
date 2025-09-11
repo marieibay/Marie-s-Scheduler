@@ -63,7 +63,7 @@ export const QCDashboard: React.FC<QCDashboardProps> = ({ projects, qcLogs }) =>
             <main className="container mx-auto p-4 md:px-8 md:py-8">
                 {activeTab === 'logHours' && <QCProjectLoggerDashboard projects={activeProjectsForQC} allLogs={qcLogs} selectedQC={selectedQC} />}
                 {activeTab === 'myStats' && <QCPersonalStatsView allLogs={qcLogs} selectedQC={selectedQC} projects={projects} />}
-                {activeTab === 'teamProductivity' && <QCTeamProductivityView />}
+                {activeTab === 'teamProductivity' && <QCTeamProductivityView allLogs={qcLogs} />}
             </main>
         </div>
     );

@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { Project, QCProductivityLog } from './types';
 import { qcPersonnel } from './employees';
@@ -544,9 +543,8 @@ export const QCPersonalStatsView: React.FC<{ allLogs: QCProductivityLog[]; selec
 };
 
 
-export const QCTeamProductivityView: React.FC = () => {
+export const QCTeamProductivityView: React.FC<{ allLogs: QCProductivityLog[] }> = ({ allLogs }) => {
     const [currentDate, setCurrentDate] = useState(new Date());
-    const [teamLogs, setTeamLogs] = useState<Record<string, number>>({});
     const [viewMode, setViewMode] = useState<'week' | 'month'>('week');
 
     const { dateRange, label } = useMemo(() => {
@@ -568,25 +566,22 @@ export const QCTeamProductivityView: React.FC = () => {
             }
         }
     }, [currentDate, viewMode]);
+    
+    const teamLogs = useMemo(() => {
+        const startStr = formatDate(dateRange.start);
+        const endStr = formatDate(dateRange.end);
+        
+        const logsInPeriod = allLogs.filter(log => 
+            log.date >= startStr && log.date <= endStr
+        );
 
-    useEffect(() => {
-        const fetchLogs = async () => {
-            const { data } = await supabase
-                .from('qc_productivity_logs')
-                .select('qc_name, hours_worked')
-                .gte('date', formatDate(dateRange.start))
-                .lte('date', formatDate(dateRange.end));
-            
-            if (data) {
-                const summary = data.reduce((acc, log) => {
-                    acc[log.qc_name] = (acc[log.qc_name] || 0) + log.hours_worked;
-                    return acc;
-                }, {} as Record<string, number>);
-                setTeamLogs(summary);
-            }
-        };
-        fetchLogs();
-    }, [dateRange]);
+        const summary = logsInPeriod.reduce((acc, log) => {
+            acc[log.qc_name] = (acc[log.qc_name] || 0) + log.hours_worked;
+            return acc;
+        }, {} as Record<string, number>);
+
+        return summary;
+    }, [allLogs, dateRange]);
     
     const handleDateChange = (direction: 'prev' | 'next') => {
         const d = new Date(currentDate);
@@ -596,7 +591,7 @@ export const QCTeamProductivityView: React.FC = () => {
         setCurrentDate(d);
     };
 
-    const sortedQC = useMemo(() => qcPersonnel.sort((a,b) => (teamLogs[b] || 0) - (teamLogs[a] || 0)), [teamLogs]);
+    const sortedQC = useMemo(() => [...qcPersonnel].sort((a,b) => (teamLogs[b] || 0) - (teamLogs[a] || 0)), [teamLogs]);
     
     const totalHours = useMemo(() => {
         return Object.values(teamLogs).reduce((sum, hours) => sum + hours, 0);
