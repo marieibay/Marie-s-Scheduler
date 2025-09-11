@@ -1,10 +1,10 @@
+
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Project, ViewMode, ProductivityLog, QCProductivityLog } from './types';
 import { supabase } from './supabaseClient';
 import { 
     ManagerView, 
     ClientView, 
-    EditorView,
     DeleteConfirmationModal,
     PlusIcon,
     DailyNotesWidget,
@@ -98,7 +98,7 @@ const ManagerDashboard: React.FC<{
     isLoading: boolean;
 }> = ({ projects, dailyNotesContent, productivityByProject, onAddProject, onUpdateProject, onNotesChange, onHistoricalCorrection, isNewEditColumnMissing, isLoading }) => {
     const [viewMode, setViewMode] = useState<ViewMode>('manager');
-    const [currentPage, setCurrentPage] = useState<'ongoing' | 'done' | 'all-active' | 'archived' | 'editorView'>('ongoing');
+    const [currentPage, setCurrentPage] = useState<'ongoing' | 'done' | 'all-active' | 'archived'>('ongoing');
     const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
     const [isNotesVisible, setIsNotesVisible] = useState(false);
     const [sortBy, setSortBy] = useState<'default' | 'date'>('default');
@@ -169,16 +169,6 @@ const ManagerDashboard: React.FC<{
     }, [projectToDelete, onUpdateProject]);
 
     const renderCurrentView = () => {
-        // Editor View is separate
-        if (currentPage === 'editorView') {
-            const sortedProjects = [...ongoingProjects].sort((a,b) => {
-                if (!a.due_date) return 1;
-                if (!b.due_date) return -1;
-                return new Date(a.due_date).getTime() - new Date(b.due_date).getTime();
-            });
-            return <EditorView projects={sortedProjects} onUpdate={onUpdateProject} productivityByProject={productivityByProject} />;
-        }
-
         // Client View is always grouped and shows ongoing projects
         if (viewMode === 'client') {
             const { groupedProjects, sortedClients } = getGroupedAndSortedProjects(ongoingProjects);
@@ -321,7 +311,6 @@ const ManagerDashboard: React.FC<{
                                     <button onClick={() => setCurrentPage('done')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${currentPage === 'done' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>Edit Done</button>
                                     <button onClick={() => setCurrentPage('all-active')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${currentPage === 'all-active' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>All Active</button>
                                     <button onClick={() => setCurrentPage('archived')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${currentPage === 'archived' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>Archived Projects</button>
-                                    <button onClick={() => setCurrentPage('editorView')} className={`px-4 py-2 rounded-md text-sm font-semibold transition-colors ${currentPage === 'editorView' ? 'bg-indigo-600 text-white shadow' : 'text-gray-600 hover:bg-gray-200'}`}>Editor View</button>
                                 </div>
                                 {currentPage === 'ongoing' && viewMode === 'manager' && (
                                     <div className="flex items-center gap-2">
