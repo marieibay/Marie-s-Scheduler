@@ -370,12 +370,7 @@ interface DueDateDisplayProps {
 
 export const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ due_date, original_due_date, onUpdate, isReadOnly = false }) => {
     const [isEditing, setIsEditing] = useState(false);
-    const [inputValue, setInputValue] = useState('');
-    const textInputRef = useRef<HTMLInputElement>(null);
     const dateInputRef = useRef<HTMLInputElement>(null);
-
-    // Create a unique ID for the date picker input to link with the label
-    const datePickerId = useMemo(() => `date-picker-${Math.random().toString(36).substr(2, 9)}`, []);
 
     const formatDateForDisplay = (dateStr: string | null): string => {
         if (!dateStr) return 'MM/DD/YYYY';
@@ -392,13 +387,16 @@ export const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ due_date, origin
     };
 
     useEffect(() => {
-        if (isEditing) {
-            const formatted = formatDateForDisplay(due_date);
-            setInputValue(formatted === 'MM/DD/YYYY' ? '' : formatted);
-            textInputRef.current?.focus();
-            textInputRef.current?.select();
+        if (isEditing && !isReadOnly) {
+            dateInputRef.current?.focus();
+            try {
+                // This is a progressive enhancement to open the picker automatically on supported browsers.
+                dateInputRef.current?.showPicker();
+            } catch (e) {
+                // Silently fail if not supported.
+            }
         }
-    }, [isEditing, due_date]);
+    }, [isEditing, isReadOnly]);
 
     const handleDisplayClick = (e: React.MouseEvent) => {
         if (isReadOnly) return;
@@ -406,41 +404,13 @@ export const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ due_date, origin
         setIsEditing(true);
     };
 
-    const saveDate = () => {
-        setIsEditing(false);
-        if (!inputValue.trim()) {
-            if (due_date !== null) onUpdate(null);
-            return;
-        }
-
-        const parts = inputValue.trim().match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
-        if (parts) {
-            const month = parseInt(parts[1], 10);
-            const day = parseInt(parts[2], 10);
-            const year = parseInt(parts[3], 10);
-            if (month < 1 || month > 12 || day < 1 || day > 31) return;
-            
-            const date = new Date(year, month - 1, day);
-            if (!isNaN(date.getTime()) && date.getFullYear() === year && date.getMonth() + 1 === month && date.getDate() === day) {
-                const yyyy = date.getFullYear();
-                const mm = String(date.getMonth() + 1).padStart(2, '0');
-                const dd = String(date.getDate()).padStart(2, '0');
-                const newDateString = `${yyyy}-${mm}-${dd}`;
-                if (newDateString !== due_date) onUpdate(newDateString);
-            }
-        }
-    };
-    
-    const handleInputBlur = () => saveDate();
-    const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => setInputValue(e.target.value);
-    const handleInputKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-        if (e.key === 'Enter') { e.preventDefault(); saveDate(); }
-        else if (e.key === 'Escape') setIsEditing(false);
-    };
-    
-    const handleNativeDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const handleDateChange = (e: React.ChangeEvent<HTMLInputElement>) => {
         const newDate = e.target.value;
         onUpdate(newDate || null);
+        setIsEditing(false);
+    };
+    
+    const handleBlur = () => {
         setIsEditing(false);
     };
     
@@ -466,38 +436,13 @@ export const DueDateDisplay: React.FC<DueDateDisplayProps> = ({ due_date, origin
         return (
             <div className="relative flex items-center gap-2" style={{ height: '28px' }}>
                  <span className="text-sm text-gray-600">Due:</span>
-                 <div className="relative">
-                     <input
-                        ref={textInputRef}
-                        type="text"
-                        value={inputValue}
-                        onChange={handleInputChange}
-                        onBlur={handleInputBlur}
-                        onKeyDown={handleInputKeyDown}
-                        placeholder="MM/DD/YYYY"
-                        className="p-1 border border-indigo-400 rounded-md shadow-sm w-[120px] pr-8"
-                        aria-label="Due date text input"
-                     />
-                     <label 
-                        htmlFor={datePickerId}
-                        onMouseDown={(e) => e.preventDefault()}
-                        className="absolute right-0 top-0 h-full px-2 flex items-center justify-center text-gray-500 hover:text-indigo-600 cursor-pointer"
-                        aria-label="Open date picker"
-                        title="Open date picker"
-                    >
-                         <CalendarIcon className="h-5 w-5" />
-                     </label>
-                 </div>
                  <input
-                    id={datePickerId}
                     ref={dateInputRef}
                     type="date"
                     value={formatDateForNativePicker(due_date)}
-                    onChange={handleNativeDateChange}
-                    className="absolute w-px h-px -m-px p-0 overflow-hidden"
-                    style={{ clip: 'rect(0, 0, 0, 0)', whiteSpace: 'nowrap', borderWidth: 0 }}
-                    tabIndex={-1}
-                    aria-hidden="true"
+                    onChange={handleDateChange}
+                    onBlur={handleBlur}
+                    className="p-1 border border-indigo-400 rounded-md shadow-sm"
                  />
             </div>
         );
