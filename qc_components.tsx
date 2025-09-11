@@ -231,10 +231,12 @@ const QCProjectTimeLogCard: React.FC<{
     
     const logsByQC = useMemo(() => {
         const byQC = projectLogsForWeek.reduce((acc, log) => {
-            if (!acc[log.qc_name]) {
-                acc[log.qc_name] = {};
+            if (!log.qc_name) return acc;
+            const canonicalName = qcPersonnel.find(p => p.toLowerCase() === log.qc_name.toLowerCase()) || log.qc_name;
+            if (!acc[canonicalName]) {
+                acc[canonicalName] = {};
             }
-            acc[log.qc_name][log.date] = { hours_worked: log.hours_worked, log_note: log.log_note };
+            acc[canonicalName][log.date] = { hours_worked: log.hours_worked, log_note: log.log_note };
             return acc;
         }, {} as Record<string, Record<string, Partial<QCProductivityLog>>>);
         
@@ -455,7 +457,7 @@ export const QCPersonalStatsView: React.FC<{ allLogs: QCProductivityLog[]; selec
         const endStr = formatDate(endDate);
 
         const logs = allLogs.filter(log =>
-            log.qc_name === selectedQC &&
+            (log.qc_name || '').toLowerCase() === selectedQC.toLowerCase() &&
             log.date >= startStr &&
             log.date <= endStr
         );
@@ -576,7 +578,11 @@ export const QCTeamProductivityView: React.FC<{ allLogs: QCProductivityLog[] }> 
         );
 
         const summary = logsInPeriod.reduce((acc, log) => {
-            acc[log.qc_name] = (acc[log.qc_name] || 0) + log.hours_worked;
+            if (!log.qc_name) return acc;
+            // Normalize by finding the canonical name from the official list
+            const canonicalName = qcPersonnel.find(p => p.toLowerCase() === log.qc_name.toLowerCase());
+            const key = canonicalName || log.qc_name; // Fallback to original name if not found
+            acc[key] = (acc[key] || 0) + log.hours_worked;
             return acc;
         }, {} as Record<string, number>);
 
