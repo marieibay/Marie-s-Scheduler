@@ -1,7 +1,7 @@
 export const editors = [
   'Macky', 'Coleen', 'Jason', 'Emerson', 'Rovic', 'Manjo', 'Alan', 'Faye', 
   'Glenn', 'Lorenz', 'Joseph', 'Paulo', 'Miggy', 'Normand', 'Jazz', 'Ace', 
-  'Max', 'Jao'
+  'Max', 'Jao', 'Azi Dilan'
 ];
 
 export const masters = [

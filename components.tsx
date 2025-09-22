@@ -532,7 +532,8 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onD
     
     const calculatedTotalEdited = useMemo(() => {
         if (!productivityBreakdown) return 0;
-        return Object.values(productivityBreakdown).reduce((sum, hours) => sum + hours, 0);
+        // FIX: Explicitly type accumulator and value in reduce to prevent type inference errors.
+        return Object.values(productivityBreakdown).reduce((sum: number, hours: number) => sum + hours, 0);
     }, [productivityBreakdown]);
 
     const renderStatusButtons = () => {
@@ -698,7 +699,8 @@ export const EditorView: React.FC<Omit<ViewProps, 'onDelete' | 'onHistoricalCorr
                 <tbody>
                     {projects.map((project) => {
                         const productivityBreakdown = productivityByProject?.[project.id];
-                        const calculatedTotalEdited = Object.values(productivityBreakdown || {}).reduce((sum, h) => sum + h, 0);
+                        // FIX: Explicitly type accumulator and value in reduce to prevent type inference errors.
+                        const calculatedTotalEdited = Object.values(productivityBreakdown || {}).reduce((sum: number, h: number) => sum + h, 0);
 
                         return (
                             <tr key={project.id} className={`border-b hover:bg-gray-50 ${project.is_on_hold ? 'bg-pink-100' : 'bg-white'}`}>
@@ -915,7 +917,8 @@ const TimeLogEntryRow: React.FC<{
                 );
             })}
             <td className="px-2 py-2 font-semibold text-center text-gray-700">
-                {Object.values(projectLogs).reduce((acc, log) => acc + (parseFloat(log.hours) || 0), 0).toFixed(2)}
+                {/* FIX: Explicitly type accumulator and log value in reduce to prevent type inference errors. */}
+                {Object.values(projectLogs).reduce((acc: number, log: { hours: string }) => acc + (parseFloat(log.hours) || 0), 0).toFixed(2)}
             </td>
             <td className="px-2 py-2 text-center w-12">
                 {!isNew && (
@@ -1276,7 +1279,8 @@ export const PersonalStatsView: React.FC<{ allLogs: ProductivityLog[]; selectedE
             return acc;
         }, {} as Record<string, { hours: number; notes: string[] }>);
         
-        return Object.entries(breakdown).sort(([, dataA], [, dataB]) => dataB.hours - dataA.hours);
+        // FIX: Cast destructured sort arguments to prevent type inference errors.
+        return Object.entries(breakdown).sort(([, dataA], [, dataB]) => (dataB as { hours: number }).hours - (dataA as { hours: number }).hours);
     }, [filteredLogs, projectMap]);
     
     const handleDateChange = (direction: 'prev' | 'next') => {
@@ -1409,7 +1413,8 @@ export const TeamProductivityView: React.FC = () => {
     const sortedEditors = useMemo(() => editors.sort((a,b) => (teamLogs[b]?.total || 0) - (teamLogs[a]?.total || 0)), [teamLogs]);
     
     const totals = useMemo(() => {
-        return Object.values(teamLogs).reduce((acc, log) => {
+        // FIX: Explicitly type log value in reduce to prevent type inference errors.
+        return Object.values(teamLogs).reduce((acc, log: TeamLogSummary) => {
             acc.total += log.total;
             acc.punch += log.punch;
             acc.roll += log.roll;
