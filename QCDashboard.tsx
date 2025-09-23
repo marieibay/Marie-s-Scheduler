@@ -7,10 +7,9 @@ import { QCProjectLoggerDashboard, QCPersonalStatsView, QCTeamProductivityView }
 interface QCDashboardProps {
     projects: Project[];
     qcLogs: QCProductivityLog[];
-    onLogout: () => void;
 }
 
-export const QCDashboard: React.FC<QCDashboardProps> = ({ projects, qcLogs, onLogout }) => {
+export const QCDashboard: React.FC<QCDashboardProps> = ({ projects, qcLogs }) => {
     const [activeTab, setActiveTab] = useState('logHours');
     const [selectedQC, setSelectedQC] = useState<string>(() => {
         return localStorage.getItem('selectedQC') || (qcPersonnel.length > 0 ? qcPersonnel[0] : '');
@@ -45,7 +44,6 @@ export const QCDashboard: React.FC<QCDashboardProps> = ({ projects, qcLogs, onLo
                             >
                                 {qcPersonnel.map(qc => <option key={qc} value={qc}>{qc}</option>)}
                             </select>
-                            <button onClick={onLogout} className="px-3 py-2 text-sm bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors">Logout</button>
                         </div>
                     </header>
 

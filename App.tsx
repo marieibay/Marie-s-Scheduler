@@ -27,8 +27,7 @@ const EditorDashboard: React.FC<{
     projects: Project[]; 
     productivityLogs: ProductivityLog[];
     onUpdateProjectField: (id: number, field: keyof Project, value: string | number | boolean) => void;
-    onLogout: () => void;
-}> = ({ projects, productivityLogs, onUpdateProjectField, onLogout }) => {
+}> = ({ projects, productivityLogs, onUpdateProjectField }) => {
     const [activeTab, setActiveTab] = useState('logHours');
     const [selectedEditor, setSelectedEditor] = useState<string>(() => {
         return localStorage.getItem('selectedEditor') || (editors.length > 0 ? editors[0] : '');
@@ -63,7 +62,6 @@ const EditorDashboard: React.FC<{
                         >
                             {editors.map(editor => <option key={editor} value={editor}>{editor}</option>)}
                         </select>
-                         <button onClick={onLogout} className="px-3 py-2 text-sm bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors">Logout</button>
                     </div>
                 </header>
                 
@@ -433,8 +431,6 @@ const App: React.FC = () => {
 
     // --- DATA FETCHING & REAL-TIME SUBSCRIPTIONS ---
     useEffect(() => {
-        if (!session) return; // Don't fetch data if not logged in
-
         // Probe for QC table to determine if the feature is available
         const probeForQcTable = async () => {
              // Using `head: true` is efficient; it just checks for existence without returning data.
@@ -472,7 +468,7 @@ const App: React.FC = () => {
 
         const fetchNotes = async () => {
             const { data, error } = await supabase.from('daily_notes').select('content').eq('id', 1).single();
-            if (error) console.error('Error fetching notes:', error.message);
+            if (error) console.error('Error fetching notes:', error.message); // This will fail silently for anon users
             else setDailyNotesContent(data?.content || '');
         };
         
@@ -543,11 +539,11 @@ const App: React.FC = () => {
             supabase.removeChannel(notesChannel);
             supabase.removeChannel(logsChannel);
         };
-    }, [fetchLogs, session]);
+    }, [fetchLogs]);
 
     // Effect for fetching and subscribing to QC data, ONLY if the feature is available.
     useEffect(() => {
-        if (isQcFeatureAvailable !== true || !session) {
+        if (isQcFeatureAvailable !== true) {
             setQcProductivityLogs([]); // Ensure data is cleared if feature is disabled
             return;
         }
@@ -583,7 +579,7 @@ const App: React.FC = () => {
         return () => {
             supabase.removeChannel(qcLogsChannel);
         };
-    }, [isQcFeatureAvailable, fetchQcLogs, session]);
+    }, [isQcFeatureAvailable, fetchQcLogs]);
 
 
     const productivityByProject = useMemo(() => {
@@ -782,17 +778,19 @@ const App: React.FC = () => {
         timeout = setTimeout(() => func(...args), waitFor);
       };
     }
-
-    if (!session) {
-        return <Auth />;
-    }
+    
+    // --- RENDER LOGIC ---
 
     if (route === '/editor' || route === '/editor.html') {
-        return <EditorDashboard projects={projects} productivityLogs={productivityLogs} onUpdateProjectField={handleUpdateProjectField} onLogout={handleLogout} />;
+        if (isLoading) {
+            return <div className="flex items-center justify-center h-screen"><p>Loading Dashboard...</p></div>;
+        }
+        return <EditorDashboard projects={projects} productivityLogs={productivityLogs} onUpdateProjectField={handleUpdateProjectField} />;
     }
+    
     if (route === '/qc' || route === '/qc.html') {
         if (isLoading || isQcFeatureAvailable === null) {
-            return <div className="flex items-center justify-center h-screen"><p>Loading...</p></div>;
+            return <div className="flex items-center justify-center h-screen"><p>Loading QC Dashboard...</p></div>;
         }
         if (isQcFeatureAvailable === false) {
              return (
@@ -805,8 +803,14 @@ const App: React.FC = () => {
                 </div>
             );
         }
-        return <QCDashboard projects={projects} qcLogs={qcProductivityLogs} onLogout={handleLogout} />;
+        return <QCDashboard projects={projects} qcLogs={qcProductivityLogs} />;
     }
+
+    // Default route is Manager Dashboard, which requires auth
+    if (!session) {
+        return <Auth />;
+    }
+
     return <ManagerDashboard projects={projects} dailyNotesContent={dailyNotesContent} onAddProject={handleAddNewProject} onUpdateProject={handleUpdateProjectField} onNotesChange={handleNotesChange} onHistoricalCorrection={handleHistoricalCorrection} onLogout={handleLogout} isNewEditColumnMissing={isNewEditColumnMissing} isLoading={isLoading} productivityByProject={productivityByProject} />;
 };
 
