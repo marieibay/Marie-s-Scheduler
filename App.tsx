@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Project, ViewMode, ProductivityLog, QCProductivityLog } from './types';
 import { supabase } from './supabaseClient';
@@ -18,7 +17,7 @@ import { getClientName } from './utils';
 import { ProjectCard } from './components';
 import { editors } from './employees';
 import { Auth } from './Auth';
-import { Session, AuthChangeEvent } from '@supabase/supabase-js';
+import { Session } from '@supabase/supabase-js';
 import { SetPassword } from './SetPassword';
 
 
@@ -396,7 +395,6 @@ const ManagerDashboard: React.FC<{
 // --- MAIN APP CONTAINER (Manages state, data fetching, and routing) ---
 const App: React.FC = () => {
     const [session, setSession] = useState<Session | null>(null);
-    const [authEvent, setAuthEvent] = useState<AuthChangeEvent | null>(null);
     const [projects, setProjects] = useState<Project[]>([]);
     const [dailyNotesContent, setDailyNotesContent] = useState('');
     const [productivityLogs, setProductivityLogs] = useState<ProductivityLog[]>([]);
@@ -414,10 +412,6 @@ const App: React.FC = () => {
 
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
             setSession(session);
-            setAuthEvent(_event);
-            if (_event === 'USER_UPDATED') {
-                window.history.replaceState({}, document.title, window.location.pathname);
-            }
         });
 
         return () => subscription.unsubscribe();
@@ -812,17 +806,19 @@ const App: React.FC = () => {
         return <QCDashboard projects={projects} qcLogs={qcProductivityLogs} />;
     }
 
-    const isPasswordRecoveryFlow = authEvent === 'PASSWORD_RECOVERY' || (session && authEvent === 'SIGNED_IN' && window.location.hash.includes('access_token'));
-
-    if (isPasswordRecoveryFlow) {
+    const hasAccessTokenInUrl = window.location.hash.includes('access_token');
+    
+    // If the user has a session AND has just arrived from an invite link, force them to set a password.
+    if (session && hasAccessTokenInUrl) {
         return <SetPassword />;
     }
 
-    // Default route is Manager Dashboard, which requires auth
+    // If there's no session, show the login page.
     if (!session) {
         return <Auth />;
     }
 
+    // Otherwise, the user is fully authenticated, show the main dashboard.
     return <ManagerDashboard projects={projects} dailyNotesContent={dailyNotesContent} onAddProject={handleAddNewProject} onUpdateProject={handleUpdateProjectField} onNotesChange={handleNotesChange} onHistoricalCorrection={handleHistoricalCorrection} onLogout={handleLogout} isNewEditColumnMissing={isNewEditColumnMissing} isLoading={isLoading} productivityByProject={productivityByProject} />;
 };
 

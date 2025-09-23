@@ -1,4 +1,3 @@
-
 import React, { useState } from 'react';
 import { supabase } from './supabaseClient';
 
@@ -20,10 +19,11 @@ export const SetPassword: React.FC = () => {
             setError(error.message);
         } else {
             setMessage("Password updated successfully! You will be redirected to the dashboard shortly.");
-            // The USER_UPDATED event will be caught by App.tsx, which will hide this component.
-            // A small delay and reload ensures a smooth transition.
+            // After success, clean the URL hash and reload the page.
+            // App.tsx will then see a valid session but no access token, and will render the dashboard.
             setTimeout(() => {
-                window.location.href = '/'; 
+                window.history.replaceState({}, document.title, window.location.pathname);
+                window.location.reload();
             }, 2000);
         }
         setLoading(false);
