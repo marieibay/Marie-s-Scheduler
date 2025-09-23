@@ -19,9 +19,10 @@ export const SetPassword: React.FC = () => {
             setError(error.message);
         } else {
             setMessage("Password updated successfully! You will be redirected to the dashboard shortly.");
-            // After success, clean the URL hash and reload the page.
-            // App.tsx will then see a valid session but no access token, and will render the dashboard.
+            // After success, clear the invite flag, clean the URL, and reload.
+            // App.tsx will then see a valid session but no invite flag, and will render the dashboard.
             setTimeout(() => {
+                sessionStorage.removeItem('supabase_invite_flow');
                 window.history.replaceState({}, document.title, window.location.pathname);
                 window.location.reload();
             }, 2000);

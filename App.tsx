@@ -394,10 +394,16 @@ const ManagerDashboard: React.FC<{
 
 // --- MAIN APP CONTAINER (Manages state, data fetching, and routing) ---
 const App: React.FC = () => {
-    // This state is 'latched' on the first render to capture if the user arrived via an invite link.
-    // This prevents a race condition where the auth library cleans the URL before React can process it.
-    const [isInviteFlow] = useState(() => window.location.hash.includes('access_token'));
-
+    // This state uses sessionStorage to survive page reloads and avoid race conditions.
+    // It reliably detects if a user has arrived from an invite link.
+    const [isInviteFlow] = useState(() => {
+        if (window.location.hash.includes('access_token')) {
+            sessionStorage.setItem('supabase_invite_flow', 'true');
+            return true;
+        }
+        return sessionStorage.getItem('supabase_invite_flow') === 'true';
+    });
+    
     const [session, setSession] = useState<Session | null>(null);
     const [projects, setProjects] = useState<Project[]>([]);
     const [dailyNotesContent, setDailyNotesContent] = useState('');
@@ -811,7 +817,7 @@ const App: React.FC = () => {
     }
 
     // If the user has a session AND we know they started from an invite link,
-    // force them to set a password. This check is now robust against the URL changing.
+    // force them to set a password.
     if (session && isInviteFlow) {
         return <SetPassword />;
     }
