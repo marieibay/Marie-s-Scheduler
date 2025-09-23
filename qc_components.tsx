@@ -198,7 +198,7 @@ const QCTimeLogEntryRow: React.FC<{
                 );
             })}
             <td className="px-2 py-2 font-semibold text-center text-gray-700">
-                {/* FIX: Explicitly type accumulator and log value in reduce to prevent type inference errors. */}
+                {/* Fix: Explicitly typed the arguments of the reduce function to prevent type inference errors. */}
                 {Object.values(projectLogs).reduce((acc: number, log: { hours: string }) => acc + (parseFloat(log.hours) || 0), 0).toFixed(2)}
             </td>
             <td className="px-2 py-2 text-center w-12">

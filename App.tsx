@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import { Project, ViewMode, ProductivityLog, QCProductivityLog } from './types';
 import { supabase } from './supabaseClient';
@@ -16,6 +17,8 @@ import { QCDashboard } from './QCDashboard';
 import { getClientName } from './utils';
 import { ProjectCard } from './components';
 import { editors } from './employees';
+import { Auth } from './Auth';
+import { Session } from '@supabase/supabase-js';
 
 
 // --- CHILD COMPONENTS (Now receive state and handlers via props) ---
@@ -24,7 +27,8 @@ const EditorDashboard: React.FC<{
     projects: Project[]; 
     productivityLogs: ProductivityLog[];
     onUpdateProjectField: (id: number, field: keyof Project, value: string | number | boolean) => void;
-}> = ({ projects, productivityLogs, onUpdateProjectField }) => {
+    onLogout: () => void;
+}> = ({ projects, productivityLogs, onUpdateProjectField, onLogout }) => {
     const [activeTab, setActiveTab] = useState('logHours');
     const [selectedEditor, setSelectedEditor] = useState<string>(() => {
         return localStorage.getItem('selectedEditor') || (editors.length > 0 ? editors[0] : '');
@@ -59,6 +63,7 @@ const EditorDashboard: React.FC<{
                         >
                             {editors.map(editor => <option key={editor} value={editor}>{editor}</option>)}
                         </select>
+                         <button onClick={onLogout} className="px-3 py-2 text-sm bg-red-500 text-white rounded-md hover:bg-red-600 transition-colors">Logout</button>
                     </div>
                 </header>
                 
@@ -93,9 +98,10 @@ const ManagerDashboard: React.FC<{
     onUpdateProject: (id: number, field: keyof Project, value: string | number | boolean | null) => void;
     onNotesChange: (newContent: string) => void;
     onHistoricalCorrection: (projectId: number, hours: number) => Promise<void>;
+    onLogout: () => void;
     isNewEditColumnMissing: boolean;
     isLoading: boolean;
-}> = ({ projects, dailyNotesContent, productivityByProject, onAddProject, onUpdateProject, onNotesChange, onHistoricalCorrection, isNewEditColumnMissing, isLoading }) => {
+}> = ({ projects, dailyNotesContent, productivityByProject, onAddProject, onUpdateProject, onNotesChange, onHistoricalCorrection, onLogout, isNewEditColumnMissing, isLoading }) => {
     const [viewMode, setViewMode] = useState<ViewMode>('manager');
     const [currentPage, setCurrentPage] = useState<'ongoing' | 'done' | 'all-active' | 'archived'>('ongoing');
     const [projectToDelete, setProjectToDelete] = useState<Project | null>(null);
@@ -299,6 +305,12 @@ const ManagerDashboard: React.FC<{
                                     </button>
                                 </>
                             )}
+                             <button onClick={onLogout} className="px-4 py-2 bg-red-500 text-white rounded-lg shadow hover:bg-red-600 transition-transform duration-150 ease-in-out active:scale-95 flex items-center">
+                                <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 sm:mr-2" viewBox="0 0 20 20" fill="currentColor">
+                                    <path fillRule="evenodd" d="M3 3a1 1 0 00-1 1v12a1 1 0 102 0V4a1 1 0 00-1-1zm10.293 9.293a1 1 0 001.414 1.414l3-3a1 1 0 000-1.414l-3-3a1 1 0 10-1.414 1.414L14.586 9H7a1 1 0 100 2h7.586l-1.293 1.293z" clipRule="evenodd" />
+                                </svg>
+                                <span className="hidden sm:inline">Logout</span>
+                            </button>
                         </div>
                     </header>
     
@@ -384,6 +396,7 @@ const ManagerDashboard: React.FC<{
 
 // --- MAIN APP CONTAINER (Manages state, data fetching, and routing) ---
 const App: React.FC = () => {
+    const [session, setSession] = useState<Session | null>(null);
     const [projects, setProjects] = useState<Project[]>([]);
     const [dailyNotesContent, setDailyNotesContent] = useState('');
     const [productivityLogs, setProductivityLogs] = useState<ProductivityLog[]>([]);
@@ -393,6 +406,18 @@ const App: React.FC = () => {
     const [isQcFeatureAvailable, setIsQcFeatureAvailable] = useState<boolean | null>(null);
     const newEditFailureDetected = useRef(false);
     const [isLoading, setIsLoading] = useState(true);
+
+    useEffect(() => {
+        supabase.auth.getSession().then(({ data: { session } }) => {
+            setSession(session);
+        });
+
+        const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
+            setSession(session);
+        });
+
+        return () => subscription.unsubscribe();
+    }, []);
 
     const fetchLogs = useCallback(async () => {
         const { data, error } = await supabase.from('productivity_logs').select('*');
@@ -408,6 +433,8 @@ const App: React.FC = () => {
 
     // --- DATA FETCHING & REAL-TIME SUBSCRIPTIONS ---
     useEffect(() => {
+        if (!session) return; // Don't fetch data if not logged in
+
         // Probe for QC table to determine if the feature is available
         const probeForQcTable = async () => {
              // Using `head: true` is efficient; it just checks for existence without returning data.
@@ -450,6 +477,7 @@ const App: React.FC = () => {
         };
         
         const startup = async () => {
+            setIsLoading(true);
             await Promise.all([
                 probeForQcTable(),
                 probeForNewEditColumn(),
@@ -515,11 +543,11 @@ const App: React.FC = () => {
             supabase.removeChannel(notesChannel);
             supabase.removeChannel(logsChannel);
         };
-    }, [fetchLogs]);
+    }, [fetchLogs, session]);
 
     // Effect for fetching and subscribing to QC data, ONLY if the feature is available.
     useEffect(() => {
-        if (isQcFeatureAvailable !== true) {
+        if (isQcFeatureAvailable !== true || !session) {
             setQcProductivityLogs([]); // Ensure data is cleared if feature is disabled
             return;
         }
@@ -555,7 +583,7 @@ const App: React.FC = () => {
         return () => {
             supabase.removeChannel(qcLogsChannel);
         };
-    }, [isQcFeatureAvailable, fetchQcLogs]);
+    }, [isQcFeatureAvailable, fetchQcLogs, session]);
 
 
     const productivityByProject = useMemo(() => {
@@ -742,6 +770,10 @@ const App: React.FC = () => {
         return () => window.removeEventListener('popstate', onLocationChange);
     }, []);
 
+    const handleLogout = () => {
+        supabase.auth.signOut();
+    };
+
     // Helper for debouncing
     function debounce<F extends (...args: any[]) => any>(func: F, waitFor: number) {
       let timeout: ReturnType<typeof setTimeout> | null = null;
@@ -751,8 +783,12 @@ const App: React.FC = () => {
       };
     }
 
+    if (!session) {
+        return <Auth />;
+    }
+
     if (route === '/editor' || route === '/editor.html') {
-        return <EditorDashboard projects={projects} productivityLogs={productivityLogs} onUpdateProjectField={handleUpdateProjectField} />;
+        return <EditorDashboard projects={projects} productivityLogs={productivityLogs} onUpdateProjectField={handleUpdateProjectField} onLogout={handleLogout} />;
     }
     if (route === '/qc' || route === '/qc.html') {
         if (isLoading || isQcFeatureAvailable === null) {
@@ -769,9 +805,9 @@ const App: React.FC = () => {
                 </div>
             );
         }
-        return <QCDashboard projects={projects} qcLogs={qcProductivityLogs} />;
+        return <QCDashboard projects={projects} qcLogs={qcProductivityLogs} onLogout={handleLogout} />;
     }
-    return <ManagerDashboard projects={projects} dailyNotesContent={dailyNotesContent} onAddProject={handleAddNewProject} onUpdateProject={handleUpdateProjectField} onNotesChange={handleNotesChange} onHistoricalCorrection={handleHistoricalCorrection} isNewEditColumnMissing={isNewEditColumnMissing} isLoading={isLoading} productivityByProject={productivityByProject} />;
+    return <ManagerDashboard projects={projects} dailyNotesContent={dailyNotesContent} onAddProject={handleAddNewProject} onUpdateProject={handleUpdateProjectField} onNotesChange={handleNotesChange} onHistoricalCorrection={handleHistoricalCorrection} onLogout={handleLogout} isNewEditColumnMissing={isNewEditColumnMissing} isLoading={isLoading} productivityByProject={productivityByProject} />;
 };
 
 export default App;

@@ -530,9 +530,9 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onD
     
     const handleUpdate = (field: keyof Project, value: any) => onUpdate(project.id, field, value);
     
+// Fix: Explicitly typed the arguments of the reduce function to prevent type inference errors on calculatedTotalEdited.
     const calculatedTotalEdited = useMemo(() => {
         if (!productivityBreakdown) return 0;
-        // FIX: Explicitly type accumulator and value in reduce to prevent type inference errors.
         return Object.values(productivityBreakdown).reduce((sum: number, hours: number) => sum + hours, 0);
     }, [productivityBreakdown]);
 
@@ -699,7 +699,7 @@ export const EditorView: React.FC<Omit<ViewProps, 'onDelete' | 'onHistoricalCorr
                 <tbody>
                     {projects.map((project) => {
                         const productivityBreakdown = productivityByProject?.[project.id];
-                        // FIX: Explicitly type accumulator and value in reduce to prevent type inference errors.
+                        // Fix: Explicitly typed the arguments of the reduce function to prevent type inference errors on calculatedTotalEdited.
                         const calculatedTotalEdited = Object.values(productivityBreakdown || {}).reduce((sum: number, h: number) => sum + h, 0);
 
                         return (
@@ -1412,8 +1412,8 @@ export const TeamProductivityView: React.FC = () => {
 
     const sortedEditors = useMemo(() => editors.sort((a,b) => (teamLogs[b]?.total || 0) - (teamLogs[a]?.total || 0)), [teamLogs]);
     
+// Fix: Explicitly typed the 'log' argument in reduce to prevent accessing properties on an 'unknown' type.
     const totals = useMemo(() => {
-        // FIX: Explicitly type log value in reduce to prevent type inference errors.
         return Object.values(teamLogs).reduce((acc, log: TeamLogSummary) => {
             acc.total += log.total;
             acc.punch += log.punch;
