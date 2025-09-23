@@ -199,6 +199,7 @@ const QCTimeLogEntryRow: React.FC<{
             })}
             <td className="px-2 py-2 font-semibold text-center text-gray-700">
                 {/* FIX: Explicitly typed the arguments of the reduce function to prevent type inference errors. */}
+                {/* FIX: Explicitly typed the arguments of the reduce function to prevent type inference errors. */}
                 {Object.values(projectLogs).reduce((acc: number, log: { hours: string; }) => acc + (parseFloat(log.hours) || 0), 0).toFixed(2)}
             </td>
             <td className="px-2 py-2 text-center w-12">
@@ -616,6 +617,7 @@ export const QCTeamProductivityView: React.FC<{ allLogs: QCProductivityLog[] }> 
     
     const totalHours = useMemo(() => {
         // FIX: Explicitly type accumulator and value in reduce to prevent type inference errors.
+        // FIX: Explicitly typed accumulator and value in reduce to prevent type inference errors.
         return Object.values(teamLogs).reduce((sum: number, hours: number) => sum + hours, 0);
     }, [teamLogs]);
 
