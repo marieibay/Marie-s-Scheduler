@@ -741,10 +741,16 @@ const getStartOfWeek = (date: Date): Date => {
 };
 
 const formatDate = (date: Date): string => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  // This function is designed to be timezone-proof.
+  // It gets the user's local timezone offset in minutes and converts it to milliseconds.
+  const userTimezoneOffset = date.getTimezoneOffset() * 60000;
+  // By creating a new Date object from the original time minus the offset,
+  // we effectively create a UTC date that has the same year, month, and day
+  // as the original local date.
+  const localDate = new Date(date.getTime() - userTimezoneOffset);
+  // .toISOString() always returns a UTC timestamp (e.g., "2024-09-25T00:00:00.000Z").
+  // We can then safely slice the date part, which will now be correct.
+  return localDate.toISOString().split('T')[0];
 };
 
 const getWeekDays = (startOfWeek: Date): Date[] => {
