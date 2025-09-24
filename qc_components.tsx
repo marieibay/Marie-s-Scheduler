@@ -39,7 +39,10 @@ const getStartOfWeek = (date: Date): Date => {
 };
 
 const formatDate = (date: Date): string => {
-  return date.toISOString().split('T')[0];
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 const getWeekDays = (startOfWeek: Date): Date[] => {
@@ -448,7 +451,7 @@ export const QCPersonalStatsView: React.FC<{ allLogs: QCProductivityLog[]; selec
             default:
                 startDate = getStartOfWeek(now);
                 endDate = new Date(startDate);
-                endDate.setDate(startDate.getDate() + 6);
+                endDate.setDate(startDate.getDate() + 4);
                 label = `Week of ${startDate.toLocaleDateString()}`;
                 break;
         }
