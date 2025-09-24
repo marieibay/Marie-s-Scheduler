@@ -741,12 +741,10 @@ const getStartOfWeek = (date: Date): Date => {
 };
 
 const formatDate = (date: Date): string => {
-  // This is a robust way to get the local date as a YYYY-MM-DD string,
-  // regardless of the user's timezone. It works by creating a new Date object
-  // whose UTC time is the same as the original object's local time.
-  const timezoneOffsetMs = date.getTimezoneOffset() * 60000;
-  const localDate = new Date(date.getTime() - timezoneOffsetMs);
-  return localDate.toISOString().slice(0, 10);
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 const getWeekDays = (startOfWeek: Date): Date[] => {
