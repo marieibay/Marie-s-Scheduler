@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { Project, QCProductivityLog } from './types';
 import { qcPersonnel } from './employees';
@@ -39,9 +38,10 @@ const getStartOfWeek = (date: Date): Date => {
 };
 
 const formatDate = (date: Date): string => {
-  // Adjust for timezone offset before converting to ISO string to get YYYY-MM-DD of the local date
-  const adjustedDate = new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
-  return adjustedDate.toISOString().split('T')[0];
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 const getWeekDays = (startOfWeek: Date): Date[] => {

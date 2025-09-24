@@ -1,4 +1,3 @@
-
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { Project, ProductivityLog } from './types';
 import { editors, masters, qcPersonnel } from './employees';
@@ -10,7 +9,7 @@ const INLINE_INPUT_CLASS = "bg-transparent focus:bg-white w-full p-1 -m-1 rounde
 
 // --- ICON COMPONENTS ---
 export const PlusIcon: React.FC = () => (
-    <svg xmlns="http://www.w.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
+    <svg xmlns="http://www.w3.org/2000/svg" className="h-5 w-5 mr-2" viewBox="0 0 20 20" fill="currentColor">
         <path fillRule="evenodd" d="M10 3a1 1 0 011 1v5h5a1 1 0 110 2h-5v5a1 1 0 11-2 0v-5H4a1 1 0 110-2h5V4a1 1 0 011-1z" clipRule="evenodd" />
     </svg>
 );
@@ -742,9 +741,10 @@ const getStartOfWeek = (date: Date): Date => {
 };
 
 const formatDate = (date: Date): string => {
-  // Adjust for timezone offset before converting to ISO string to get YYYY-MM-DD of the local date
-  const adjustedDate = new Date(date.getTime() - (date.getTimezoneOffset() * 60000));
-  return adjustedDate.toISOString().split('T')[0];
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, '0');
+  const day = String(date.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
 };
 
 const getWeekDays = (startOfWeek: Date): Date[] => {
