@@ -667,6 +667,31 @@ const App: React.FC = () => {
             console.warn("Direct updates to 'total_edited' are deprecated. It is now calculated from productivity logs.");
             return;
         }
+        
+        // Use a secure RPC call for updating remaining_raw from editor/QC views
+        if (field === 'remaining_raw') {
+            const projectForRollback = projects.find(p => p.id === id);
+            if (!projectForRollback) {
+                console.error(`Project with id ${id} not found for update.`);
+                return;
+            }
+            
+            // Optimistic UI update
+            setProjects(currentProjects => currentProjects.map(p => p.id === id ? { ...p, remaining_raw: value } : p));
+
+            const { error } = await supabase.rpc('update_remaining_raw', {
+                project_id_in: id,
+                new_value: value
+            });
+            
+            if (error) {
+                console.error(`Failed to update remaining_raw via RPC:`, error.message);
+                alert(`Failed to update Remaining RAW. Error: ${error.message}. The value has been reverted.`);
+                // Rollback optimistic update
+                setProjects(currentProjects => currentProjects.map(p => p.id === id ? projectForRollback : p));
+            }
+            return; // Exit after handling RPC
+        }
 
         const projectForRollback = projects.find(p => p.id === id);
 

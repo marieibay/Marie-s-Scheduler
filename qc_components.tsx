@@ -199,7 +199,6 @@ const QCTimeLogEntryRow: React.FC<{
             })}
             <td className="px-2 py-2 font-semibold text-center text-gray-700">
                 {/* FIX: Explicitly typed the arguments of the reduce function to prevent type inference errors. */}
-                {/* FIX: Explicitly typed the arguments of the reduce function to prevent type inference errors. */}
                 {Object.values(projectLogs).reduce((acc: number, log: { hours: string; }) => acc + (parseFloat(log.hours) || 0), 0).toFixed(2)}
             </td>
             <td className="px-2 py-2 text-center w-12">
@@ -489,8 +488,8 @@ export const QCPersonalStatsView: React.FC<{ allLogs: QCProductivityLog[]; selec
             }
             return acc;
         }, {} as Record<string, { hours: number; notes: string[] }>);
-        // FIX: Cast destructured sort arguments to prevent type inference errors.
-        return Object.entries(breakdown).sort(([, dataA], [, dataB]) => (dataB as { hours: number; }).hours - (dataA as { hours: number; }).hours);
+        // FIX: Corrected typo in type assertion and ensure arguments are correctly typed to prevent type inference errors.
+        return Object.entries(breakdown).sort(([, dataA], [, dataB]) => (dataB as { hours: number }).hours - (dataA as { hours: number }).hours);
     }, [filteredLogs, projectMap]);
     
     const handleDateChange = (direction: 'prev' | 'next') => {
@@ -616,7 +615,6 @@ export const QCTeamProductivityView: React.FC<{ allLogs: QCProductivityLog[] }> 
     const sortedQC = useMemo(() => [...qcPersonnel].sort((a,b) => (teamLogs[b] || 0) - (teamLogs[a] || 0)), [teamLogs]);
     
     const totalHours = useMemo(() => {
-        // FIX: Explicitly type accumulator and value in reduce to prevent type inference errors.
         // FIX: Explicitly typed accumulator and value in reduce to prevent type inference errors.
         return Object.values(teamLogs).reduce((sum: number, hours: number) => sum + hours, 0);
     }, [teamLogs]);
