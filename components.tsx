@@ -532,8 +532,8 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onD
     
     const calculatedTotalEdited = useMemo(() => {
         if (!productivityBreakdown) return 0;
-        // FIX: Explicitly typed the arguments of the reduce function to prevent type inference errors.
-        return Object.values(productivityBreakdown).reduce((sum: number, hours: number) => sum + hours, 0);
+        // Fix for error on line 713 and 716. Explicitly set the generic type for `reduce` to `number` to ensure correct type inference for `calculatedTotalEdited`.
+        return Object.values(productivityBreakdown).reduce<number>((sum, hours) => sum + hours, 0);
     }, [productivityBreakdown]);
 
     const renderStatusButtons = () => {
@@ -699,7 +699,6 @@ export const EditorView: React.FC<Omit<ViewProps, 'onDelete' | 'onHistoricalCorr
                 <tbody>
                     {projects.map((project) => {
                         const productivityBreakdown = productivityByProject?.[project.id];
-                        // FIX: Explicitly typed the arguments of the reduce function to prevent type inference errors.
                         const calculatedTotalEdited = Object.values(productivityBreakdown || {}).reduce((sum: number, h: number) => sum + h, 0);
 
                         return (
@@ -917,7 +916,6 @@ const TimeLogEntryRow: React.FC<{
                 );
             })}
             <td className="px-2 py-2 font-semibold text-center text-gray-700">
-                {/* FIX: Explicitly typed accumulator and log value in reduce to prevent type inference errors. */}
                 {Object.values(projectLogs).reduce((acc: number, log: { hours: string; }) => acc + (parseFloat(log.hours) || 0), 0).toFixed(2)}
             </td>
             <td className="px-2 py-2 text-center w-12">
@@ -1085,7 +1083,8 @@ const ProjectTimeLogCard: React.FC<{
         setEditorToDelete(null);
     };
 
-    const projectTotalForWeek = projectLogsForWeek.reduce((sum, log) => sum + log.hours_worked, 0);
+    // Fix for error on line 918. Explicitly typing the accumulator `sum` to ensure correct type inference for `projectTotalForWeek`.
+    const projectTotalForWeek = projectLogsForWeek.reduce((sum: number, log) => sum + log.hours_worked, 0);
 
     const canEditRaw = useMemo(() => {
         if (project.editor === selectedEditor) {
@@ -1279,7 +1278,6 @@ export const PersonalStatsView: React.FC<{ allLogs: ProductivityLog[]; selectedE
             return acc;
         }, {} as Record<string, { hours: number; notes: string[] }>);
         
-        // FIX: Corrected typo in type assertion and ensure arguments are correctly typed to prevent type inference errors.
         return Object.entries(breakdown).sort(([, dataA], [, dataB]) => (dataB as { hours: number }).hours - (dataA as { hours: number }).hours);
     }, [filteredLogs, projectMap]);
     
@@ -1413,8 +1411,8 @@ export const TeamProductivityView: React.FC = () => {
     const sortedEditors = useMemo(() => editors.sort((a,b) => (teamLogs[b]?.total || 0) - (teamLogs[a]?.total || 0)), [teamLogs]);
     
     const totals = useMemo(() => {
-        // FIX: Explicitly typed the 'log' argument in reduce to prevent accessing properties on an 'unknown' type.
-        return Object.values(teamLogs).reduce((acc, log: TeamLogSummary) => {
+        // Fix for errors on lines 1413-1415. Explicitly typing the accumulator `acc` to resolve 'unknown' type and allow property access.
+        return Object.values(teamLogs).reduce((acc: TeamLogSummary, log: TeamLogSummary) => {
             acc.total += log.total;
             acc.punch += log.punch;
             acc.roll += log.roll;
