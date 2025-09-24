@@ -659,6 +659,7 @@ export const ManagerView: React.FC<ViewProps> = ({ projects, onUpdate, onDelete,
     return (
         <div className="space-y-4">
             {projects.map(project => (
+// Fix: Changed prop name from 'productivityByProject' to 'productivityBreakdown' to match ProjectCardProps.
                 <ProjectCard key={project.id} project={project} onUpdate={onUpdate} onDelete={onDelete} onHistoricalCorrection={onHistoricalCorrection} isClientView={false} isNewEditColumnMissing={isNewEditColumnMissing} productivityBreakdown={productivityByProject?.[project.id]} />
             ))}
         </div>
@@ -670,6 +671,7 @@ export const ClientView: React.FC<Omit<ViewProps, 'onDelete'>> = ({ projects, on
     return (
         <div className="space-y-4">
             {projects.map(project => (
+// Fix: Changed prop name from 'productivityByProject' to 'productivityBreakdown' to match ProjectCardProps.
                  <ProjectCard key={project.id} project={project} onUpdate={onUpdate} onHistoricalCorrection={onHistoricalCorrection} isClientView={true} productivityBreakdown={productivityByProject?.[project.id]} />
             ))}
         </div>
@@ -1280,6 +1282,29 @@ export const PersonalStatsView: React.FC<{ allLogs: ProductivityLog[]; selectedE
         
         return Object.entries(breakdown).sort(([, dataA], [, dataB]) => (dataB as { hours: number }).hours - (dataA as { hours: number }).hours);
     }, [filteredLogs, projectMap]);
+
+    const dailyBreakdown = useMemo(() => {
+        if (timeframe !== 'week') return [];
+
+        const startOfWeek = getStartOfWeek(new Date(currentDate));
+        const weekDays = getWeekDays(startOfWeek);
+
+        const dailyTotals = weekDays.map(date => ({
+            date,
+            hours: 0,
+        }));
+
+        for (const log of filteredLogs) {
+            // log.date is 'YYYY-MM-DD' string.
+            const logDateObj = new Date(log.date + 'T00:00:00');
+            const matchingDay = dailyTotals.find(d => d.date.getTime() === logDateObj.getTime());
+            if (matchingDay) {
+                matchingDay.hours += log.hours_worked;
+            }
+        }
+
+        return dailyTotals;
+    }, [filteredLogs, timeframe, currentDate]);
     
     const handleDateChange = (direction: 'prev' | 'next') => {
         const d = new Date(currentDate);
@@ -1336,6 +1361,21 @@ export const PersonalStatsView: React.FC<{ allLogs: ProductivityLog[]; selectedE
                         <p className="text-gray-500 text-center py-8">No hours logged for this period.</p>
                     )}
                 </div>
+                {timeframe === 'week' && (
+                    <div className="md:col-span-3 bg-white p-6 rounded-lg shadow-md">
+                        <h4 className="text-xl font-bold mb-4 border-b pb-2">Daily Output</h4>
+                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 text-center">
+                            {dailyBreakdown.map(({ date, hours }) => (
+                                <div key={date.toISOString()} className="bg-gray-50 p-4 rounded-lg border border-gray-200">
+                                    <p className="font-semibold text-gray-700">{date.toLocaleDateString('en-US', { weekday: 'short' })}</p>
+                                    <p className="text-xs text-gray-500">{date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })}</p>
+                                    <p className="text-2xl font-bold text-indigo-600 mt-2">{hours.toFixed(2)}</p>
+                                    <p className="text-xs text-gray-500">hrs</p>
+                                </div>
+                            ))}
+                        </div>
+                    </div>
+                )}
             </div>
         </div>
     );
