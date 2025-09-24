@@ -742,10 +742,7 @@ const getStartOfWeek = (date: Date): Date => {
 };
 
 const formatDate = (date: Date): string => {
-  const year = date.getFullYear();
-  const month = String(date.getMonth() + 1).padStart(2, '0');
-  const day = String(date.getDate()).padStart(2, '0');
-  return `${year}-${month}-${day}`;
+  return date.toISOString().split('T')[0];
 };
 
 const getWeekDays = (startOfWeek: Date): Date[] => {
@@ -1292,21 +1289,21 @@ export const PersonalStatsView: React.FC<{ allLogs: ProductivityLog[]; selectedE
         const startOfWeek = getStartOfWeek(new Date(currentDate));
         const weekDays = getWeekDays(startOfWeek);
 
-        const dailyTotalsMap: Record<string, number> = {};
-        for (const day of weekDays) {
-            dailyTotalsMap[formatDate(day)] = 0;
-        }
+        const dailyTotals = weekDays.map(date => ({
+            date,
+            hours: 0,
+        }));
 
         for (const log of filteredLogs) {
-            if (log.date in dailyTotalsMap) {
-                dailyTotalsMap[log.date] += log.hours_worked;
+            // log.date is 'YYYY-MM-DD' string.
+            const logDateObj = new Date(log.date + 'T00:00:00');
+            const matchingDay = dailyTotals.find(d => d.date.getTime() === logDateObj.getTime());
+            if (matchingDay) {
+                matchingDay.hours += log.hours_worked;
             }
         }
 
-        return weekDays.map(date => ({
-            date,
-            hours: dailyTotalsMap[formatDate(date)] || 0,
-        }));
+        return dailyTotals;
     }, [filteredLogs, timeframe, currentDate]);
     
     const handleDateChange = (direction: 'prev' | 'next') => {
