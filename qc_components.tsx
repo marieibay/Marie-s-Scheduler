@@ -327,7 +327,7 @@ const QCProjectTimeLogCard: React.FC<{
         if (error) alert(`Failed to delete logs: ${error.message}`);
     };
 
-    // Fix for error on line 201. Explicitly typing the accumulator `sum` to ensure correct type inference for `projectTotalForWeek`.
+// Fix for error on line 204. Explicitly typing the accumulator ensures correct type inference.
     const projectTotalForWeek = projectLogsForWeek.reduce((sum: number, log) => sum + log.hours_worked, 0);
 
     return (

@@ -531,8 +531,8 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onD
     
     const calculatedTotalEdited = useMemo(() => {
         if (!productivityBreakdown) return 0;
-        // Fix for error on line 713 and 716. Explicitly set the generic type for `reduce` to `number` to ensure correct type inference for `calculatedTotalEdited`.
-        return Object.values(productivityBreakdown).reduce<number>((sum, hours) => sum + hours, 0);
+// Fix for errors on line 715 and 718. Explicitly typing the reduce parameters ensures correct type inference.
+        return Object.values(productivityBreakdown).reduce((sum: number, hours: number) => sum + hours, 0);
     }, [productivityBreakdown]);
 
     const renderStatusButtons = () => {
@@ -700,6 +700,7 @@ export const EditorView: React.FC<Omit<ViewProps, 'onDelete' | 'onHistoricalCorr
                 <tbody>
                     {projects.map((project) => {
                         const productivityBreakdown = productivityByProject?.[project.id];
+// Fix for error on line 535. Explicitly typing the reduce parameters ensures correct type inference.
                         const calculatedTotalEdited = Object.values(productivityBreakdown || {}).reduce((sum: number, h: number) => sum + h, 0);
 
                         return (
@@ -1088,7 +1089,7 @@ const ProjectTimeLogCard: React.FC<{
         setEditorToDelete(null);
     };
 
-    // Fix for error on line 918. Explicitly typing the accumulator `sum` to ensure correct type inference for `projectTotalForWeek`.
+// Fix for error on line 924. Explicitly typing the accumulator ensures correct type inference.
     const projectTotalForWeek = projectLogsForWeek.reduce((sum: number, log) => sum + log.hours_worked, 0);
 
     const canEditRaw = useMemo(() => {

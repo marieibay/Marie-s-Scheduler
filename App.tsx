@@ -405,6 +405,7 @@ const App: React.FC = () => {
     });
     
     const [session, setSession] = useState<Session | null>(null);
+    const [authLoading, setAuthLoading] = useState(true);
     const [projects, setProjects] = useState<Project[]>([]);
     const [dailyNotesContent, setDailyNotesContent] = useState('');
     const [productivityLogs, setProductivityLogs] = useState<ProductivityLog[]>([]);
@@ -416,14 +417,12 @@ const App: React.FC = () => {
     const [isLoading, setIsLoading] = useState(true);
 
     useEffect(() => {
-        supabase.auth.getSession().then(({ data: { session } }) => {
-            setSession(session);
-        });
-
+        setAuthLoading(true);
         const { data: { subscription } } = supabase.auth.onAuthStateChange((_event, session) => {
-            setSession(session);
+          setSession(session);
+          setAuthLoading(false);
         });
-
+    
         return () => subscription.unsubscribe();
     }, []);
 
@@ -815,6 +814,13 @@ const App: React.FC = () => {
     }
     
     // --- RENDER LOGIC ---
+    if (authLoading) {
+        return (
+            <div className="flex items-center justify-center h-screen bg-gray-100">
+                <p className="text-gray-600 font-medium">Authenticating...</p>
+            </div>
+        );
+    }
 
     if (route === '/editor' || route === '/editor.html') {
         if (isLoading) {
