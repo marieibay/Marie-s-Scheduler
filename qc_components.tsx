@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { Project, QCProductivityLog } from './types';
 import { qcPersonnel } from './employees';
@@ -201,6 +202,7 @@ const QCTimeLogEntryRow: React.FC<{
                 );
             })}
             <td className="px-2 py-2 font-semibold text-center text-gray-700">
+                {/* FIX: Explicitly typing the `reduce` parameters `acc` and `log` to resolve type inference issues. */}
                 {Object.values(projectLogs).reduce((acc: number, log: { hours: string; }) => acc + (parseFloat(log.hours) || 0), 0).toFixed(2)}
             </td>
             <td className="px-2 py-2 text-center w-12">
@@ -327,7 +329,8 @@ const QCProjectTimeLogCard: React.FC<{
         if (error) alert(`Failed to delete logs: ${error.message}`);
     };
 
-// Fix for error on line 204. Explicitly typing the accumulator ensures correct type inference.
+    // FIX: Explicitly typing the `reduce` accumulator `sum` to `number`
+    // to prevent TypeScript from inferring it as `unknown`, which caused type errors.
     const projectTotalForWeek = projectLogsForWeek.reduce((sum: number, log) => sum + log.hours_worked, 0);
 
     return (
@@ -476,7 +479,8 @@ export const QCPersonalStatsView: React.FC<{ allLogs: QCProductivityLog[]; selec
     }, [allLogs, selectedQC, timeframe, currentDate]);
 
     const totalHours = useMemo(() =>
-        filteredLogs.reduce((sum, log) => sum + log.hours_worked, 0),
+        // FIX: Explicitly typing the `reduce` accumulator `sum` to `number` to fix type inference issues.
+        filteredLogs.reduce((sum: number, log) => sum + log.hours_worked, 0),
     [filteredLogs]);
 
     const projectBreakdown = useMemo(() => {
@@ -617,6 +621,7 @@ export const QCTeamProductivityView: React.FC<{ allLogs: QCProductivityLog[] }> 
     const sortedQC = useMemo(() => [...qcPersonnel].sort((a,b) => (teamLogs[b] || 0) - (teamLogs[a] || 0)), [teamLogs]);
     
     const totalHours = useMemo(() => {
+        // FIX: Explicitly typing the `reduce` parameters `sum` and `hours` to `number` to fix type inference issues.
         return Object.values(teamLogs).reduce((sum: number, hours: number) => sum + hours, 0);
     }, [teamLogs]);
 

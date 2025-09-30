@@ -1,3 +1,4 @@
+
 import React, { useState, useCallback, useMemo, useRef, useEffect } from 'react';
 import { Project, ProductivityLog } from './types';
 import { editors, masters, qcPersonnel } from './employees';
@@ -531,7 +532,8 @@ export const ProjectCard: React.FC<ProjectCardProps> = ({ project, onUpdate, onD
     
     const calculatedTotalEdited = useMemo(() => {
         if (!productivityBreakdown) return 0;
-// Fix for errors on line 715 and 718. Explicitly typing the reduce parameters ensures correct type inference.
+        // FIX: Explicitly typing the `reduce` parameters `sum` and `hours` to `number`
+        // to prevent TypeScript from inferring them as `unknown`, which caused type errors.
         return Object.values(productivityBreakdown).reduce((sum: number, hours: number) => sum + hours, 0);
     }, [productivityBreakdown]);
 
@@ -658,7 +660,6 @@ export const ManagerView: React.FC<ViewProps> = ({ projects, onUpdate, onDelete,
     return (
         <div className="space-y-4">
             {projects.map(project => (
-// Fix: Changed prop name from 'productivityByProject' to 'productivityBreakdown' to match ProjectCardProps.
                 <ProjectCard key={project.id} project={project} onUpdate={onUpdate} onDelete={onDelete} onHistoricalCorrection={onHistoricalCorrection} isClientView={false} isNewEditColumnMissing={isNewEditColumnMissing} productivityBreakdown={productivityByProject?.[project.id]} />
             ))}
         </div>
@@ -670,7 +671,6 @@ export const ClientView: React.FC<Omit<ViewProps, 'onDelete'>> = ({ projects, on
     return (
         <div className="space-y-4">
             {projects.map(project => (
-// Fix: Changed prop name from 'productivityByProject' to 'productivityBreakdown' to match ProjectCardProps.
                  <ProjectCard key={project.id} project={project} onUpdate={onUpdate} onHistoricalCorrection={onHistoricalCorrection} isClientView={true} productivityBreakdown={productivityByProject?.[project.id]} />
             ))}
         </div>
@@ -700,7 +700,8 @@ export const EditorView: React.FC<Omit<ViewProps, 'onDelete' | 'onHistoricalCorr
                 <tbody>
                     {projects.map((project) => {
                         const productivityBreakdown = productivityByProject?.[project.id];
-// Fix for error on line 535. Explicitly typing the reduce parameters ensures correct type inference.
+                        // FIX: Explicitly typing the `reduce` parameters `sum` and `h` to `number`
+                        // to prevent TypeScript from inferring them as `unknown`, which caused type errors.
                         const calculatedTotalEdited = Object.values(productivityBreakdown || {}).reduce((sum: number, h: number) => sum + h, 0);
 
                         return (
@@ -922,6 +923,7 @@ const TimeLogEntryRow: React.FC<{
                 );
             })}
             <td className="px-2 py-2 font-semibold text-center text-gray-700">
+                {/* FIX: Explicitly typing the `reduce` parameters `acc` and `log` to resolve type inference issues. */}
                 {Object.values(projectLogs).reduce((acc: number, log: { hours: string; }) => acc + (parseFloat(log.hours) || 0), 0).toFixed(2)}
             </td>
             <td className="px-2 py-2 text-center w-12">
@@ -1089,7 +1091,8 @@ const ProjectTimeLogCard: React.FC<{
         setEditorToDelete(null);
     };
 
-// Fix for error on line 924. Explicitly typing the accumulator ensures correct type inference.
+    // FIX: Explicitly typing the `reduce` accumulator `sum` to `number`
+    // to prevent TypeScript from inferring it as `unknown`, which caused type errors.
     const projectTotalForWeek = projectLogsForWeek.reduce((sum: number, log) => sum + log.hours_worked, 0);
 
     const canEditRaw = useMemo(() => {
@@ -1268,7 +1271,8 @@ export const PersonalStatsView: React.FC<{ allLogs: ProductivityLog[]; selectedE
     }, [allLogs, selectedEditor, timeframe, currentDate]);
 
     const totalHours = useMemo(() =>
-        filteredLogs.reduce((sum, log) => sum + log.hours_worked, 0),
+        // FIX: Explicitly typing the `reduce` accumulator `sum` to `number` to fix type inference issues.
+        filteredLogs.reduce((sum: number, log) => sum + log.hours_worked, 0),
     [filteredLogs]);
 
     const projectBreakdown = useMemo(() => {
@@ -1293,21 +1297,33 @@ export const PersonalStatsView: React.FC<{ allLogs: ProductivityLog[]; selectedE
         const startOfWeek = getStartOfWeek(new Date(currentDate));
         const weekDays = getWeekDays(startOfWeek);
 
-        const dailyTotals = weekDays.map(date => ({
-            date,
-            hours: 0,
-        }));
+        return weekDays.map(date => {
+            const dateStr = formatDate(date);
+            const logsForDay = filteredLogs.filter(log => log.date === dateStr);
+            
+            const breakdownByProject: Record<string, number> = {};
+            let totalHours = 0;
 
-        for (const log of filteredLogs) {
-            const logDateStr = log.date; // This is 'YYYY-MM-DD'
-            const matchingDay = dailyTotals.find(d => formatDate(d.date) === logDateStr);
-            if (matchingDay) {
-                matchingDay.hours += log.hours_worked;
+            for (const log of logsForDay) {
+                const title = projectMap[log.project_id] || `Project ID: ${log.project_id}`;
+                if (!breakdownByProject[title]) {
+                    breakdownByProject[title] = 0;
+                }
+                breakdownByProject[title] += log.hours_worked;
+                totalHours += log.hours_worked;
             }
-        }
 
-        return dailyTotals;
-    }, [filteredLogs, timeframe, currentDate]);
+            const breakdown = Object.entries(breakdownByProject)
+                .map(([title, hours]) => ({ title, hours }))
+                .sort((a, b) => b.hours - a.hours);
+
+            return {
+                date,
+                hours: totalHours,
+                breakdown,
+            };
+        });
+    }, [filteredLogs, timeframe, currentDate, projectMap]);
     
     const handleDateChange = (direction: 'prev' | 'next') => {
         const d = new Date(currentDate);
@@ -1367,13 +1383,32 @@ export const PersonalStatsView: React.FC<{ allLogs: ProductivityLog[]; selectedE
                 {timeframe === 'week' && (
                     <div className="md:col-span-3 bg-white p-6 rounded-lg shadow-md">
                         <h4 className="text-xl font-bold mb-4 border-b pb-2">Daily Output</h4>
-                        <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-4 text-center">
-                            {dailyBreakdown.map(({ date, hours }) => (
-                                <div key={date.toISOString()} className="bg-gray-50 p-4 rounded-lg border border-gray-200">
-                                    <p className="font-semibold text-gray-700">{date.toLocaleDateString('en-US', { weekday: 'short' })}</p>
-                                    <p className="text-xs text-gray-500">{date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })}</p>
-                                    <p className="text-2xl font-bold text-indigo-600 mt-2">{hours.toFixed(2)}</p>
-                                    <p className="text-xs text-gray-500">hrs</p>
+                        <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-5 gap-4">
+                            {dailyBreakdown.map(({ date, hours, breakdown }) => (
+                                <div key={date.toISOString()} className="bg-gray-50 p-4 rounded-lg border border-gray-200 flex flex-col space-y-3">
+                                    <div className="text-center">
+                                        <p className="font-semibold text-gray-700">{date.toLocaleDateString('en-US', { weekday: 'short' })}</p>
+                                        <p className="text-xs text-gray-500">{date.toLocaleDateString('en-US', { month: 'numeric', day: 'numeric' })}</p>
+                                        <p className="text-3xl font-bold text-indigo-600 mt-2">{hours.toFixed(2)}</p>
+                                        <p className="text-xs text-gray-500">hrs</p>
+                                    </div>
+                                    <div className="flex-grow pt-3 border-t border-gray-200 text-left">
+                                        <h5 className="text-xs font-bold text-gray-500 uppercase mb-2">Breakdown</h5>
+                                        {breakdown.length > 0 ? (
+                                            <ul className="space-y-1.5">
+                                                {breakdown.map(({ title, hours }) => (
+                                                    <li key={title} className="flex justify-between items-start text-xs gap-2">
+                                                        <span className="text-gray-700 truncate" title={title}>{title}</span>
+                                                        <span className="font-semibold text-gray-900 flex-shrink-0">{hours.toFixed(2)}</span>
+                                                    </li>
+                                                ))}
+                                            </ul>
+                                        ) : (
+                                            <div className="h-full flex items-center justify-center py-4">
+                                                <p className="text-gray-500 text-xs italic">No activity</p>
+                                            </div>
+                                        )}
+                                    </div>
                                 </div>
                             ))}
                         </div>
@@ -1454,7 +1489,7 @@ export const TeamProductivityView: React.FC = () => {
     const sortedEditors = useMemo(() => editors.sort((a,b) => (teamLogs[b]?.total || 0) - (teamLogs[a]?.total || 0)), [teamLogs]);
     
     const totals = useMemo(() => {
-        // Fix for errors on lines 1413-1415. Explicitly typing the accumulator `acc` to resolve 'unknown' type and allow property access.
+        // FIX: Explicitly typing the `reduce` accumulator `acc` and value `log` to resolve type inference issues.
         return Object.values(teamLogs).reduce((acc: TeamLogSummary, log: TeamLogSummary) => {
             acc.total += log.total;
             acc.punch += log.punch;
