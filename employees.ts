@@ -6,7 +6,7 @@ export const editors = [
 
 export const masters = [
   'Poch', 'Bernie', 'Aileen', 'Sae', 'Dan', 'Mico', 'RC', 'Nickie', 
-  'Justin', 'Chiqui', 'Jann', 'Tamara', 'Sieg', 'Jancel', 'Ralph'
+  'Justin', 'Chiqui', 'Jann', 'Tamara', 'Sieg', 'Jancel', 'Ralph', 'Emerson'
 ];
 
 export const qcPersonnel = [

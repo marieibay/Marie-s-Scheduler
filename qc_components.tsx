@@ -204,7 +204,7 @@ const QCTimeLogEntryRow: React.FC<{
             })}
             <td className="px-2 py-2 font-semibold text-center text-gray-700">
                 {/* FIX: Explicitly typing the `reduce` parameters `acc` and `log` to resolve type inference issues. */}
-                {Object.values(projectLogs).reduce((acc: number, log: { hours: string }) => acc + (parseFloat(log.hours) || 0), 0).toFixed(2)}
+                {Object.values(projectLogs).reduce((acc: number, log: { hours: string; }) => acc + (parseFloat(log.hours) || 0), 0).toFixed(2)}
             </td>
             <td className="px-2 py-2 text-center w-12">
                 {!isNew && (
@@ -332,7 +332,7 @@ const QCProjectTimeLogCard: React.FC<{
 
     // FIX: Explicitly typing the `reduce` accumulator `sum` to `number`
     // to prevent TypeScript from inferring it as `unknown`, which caused type errors.
-    const projectTotalForWeek = projectLogsForWeek.reduce((sum: number, log) => sum + log.hours_worked, 0);
+    const projectTotalForWeek = projectLogsForWeek.reduce((sum: number, log: QCProductivityLog) => sum + log.hours_worked, 0);
 
     return (
         <div className="bg-white rounded-lg shadow transition-shadow hover:shadow-md" ref={cardRef}>
@@ -481,7 +481,7 @@ export const QCPersonalStatsView: React.FC<{ allLogs: QCProductivityLog[]; selec
 
     const totalHours = useMemo(() =>
         // FIX: Explicitly typing the `reduce` accumulator `sum` to `number` to fix type inference issues.
-        filteredLogs.reduce((sum: number, log) => sum + log.hours_worked, 0),
+        filteredLogs.reduce((sum: number, log: QCProductivityLog) => sum + log.hours_worked, 0),
     [filteredLogs]);
 
     const projectBreakdown = useMemo(() => {
